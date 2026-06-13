@@ -12,13 +12,27 @@ node_modules
 # Logs
 logs
 *.log
+npm-debug.log*
 
-# Misc
+# Editor & IDE
 .DS_Store
 .fleet
 .idea
+.vscode/
+*.swp
+*.swo
+*~
 
 # Local env files
 .env
 .env.*
 !.env.example
+
+# OS
+Thumbs.db
+
+# local overrides
+*.local
+
+# opencode AI config
+opencode.json

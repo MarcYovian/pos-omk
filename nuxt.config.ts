@@ -1,9 +1,8 @@
-// nuxt.config.ts — complete configuration
+// nuxt.config.ts
 export default defineNuxtConfig({
-  // SPA mode — no SSR (Supabase auth requires client-side session)
   ssr: false,
 
-  compatibilityDate: '2024-04-03',
+  compatibilityDate: '2026-06-13',
 
   css: [
     '~/assets/css/main.css'
@@ -18,23 +17,10 @@ export default defineNuxtConfig({
     '@vueuse/nuxt',
   ],
 
-  // Workaround for Nuxt 3.21.7 Vite Builder bug in ssr:false mode
-  vite: {
-    build: {
-      rollupOptions: {
-        input: {
-          server: 'app.vue',
-          entry: 'app.vue'
-        }
-      }
-    }
-  },
-
-  // Supabase module configuration
   supabase: {
     url: process.env.SUPABASE_URL,
     key: process.env.SUPABASE_ANON_KEY,
-    redirect: false,              // We handle redirects manually in middleware
+    redirect: false,
     redirectOptions: {
       login: '/login',
       callback: '/confirm',
@@ -53,12 +39,10 @@ export default defineNuxtConfig({
     },
   },
 
-  // Pinia module
   pinia: {
-    storesDirs: ['./stores/**'],
+    storesDirs: ['~/stores/**'],
   },
 
-  // PWA configuration
   pwa: {
     registerType: 'autoUpdate',
     manifest: {
@@ -93,18 +77,15 @@ export default defineNuxtConfig({
     },
   },
 
-  // TypeScript strict mode
   typescript: {
     strict: true,
     typeCheck: false
   },
 
-  // Auto-imports
   imports: {
-    dirs: ['stores', 'composables', 'utils'],
+    dirs: ['~/stores', '~/composables', '~/utils'],
   },
 
-  // Runtime config
   runtimeConfig: {
     public: {
       supabaseUrl: process.env.SUPABASE_URL,
@@ -112,6 +93,5 @@ export default defineNuxtConfig({
     },
   },
 
-  // Dev tools
   devtools: { enabled: true },
 })

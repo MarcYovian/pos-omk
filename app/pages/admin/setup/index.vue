@@ -1,0 +1,258 @@
+<!-- pages/admin/setup.vue -->
+<script setup lang="ts">
+import { ref, onMounted, computed } from 'vue'
+import { useAuthStore } from '~/stores/auth'
+import { useSessionStore } from '~/stores/session'
+import { useUmkmStore } from '~/stores/umkm'
+import { useProductStore } from '~/stores/products'
+import { useToast } from '~/composables/useToast'
+import AppButton from '~/components/ui/AppButton.vue'
+import AppInput from '~/components/ui/AppInput.vue'
+import AppModal from '~/components/ui/AppModal.vue'
+import AppToast from '~/components/ui/AppToast.vue'
+
+definePageMeta({
+  middleware: ['auth', 'admin']
+})
+
+const authStore = useAuthStore()
+const sessionStore = useSessionStore()
+const umkmStore = useUmkmStore()
+const productStore = useProductStore()
+const { addToast } = useToast()
+
+const isAddUmkmOpen = ref(false)
+const newUmkmName = ref('')
+const newUmkmWa = ref('')
+const isSubmitting = ref(false)
+
+const loadAllData = async () => {
+  try {
+    await sessionStore.fetchTodaySession()
+    await umkmStore.fetchAll()
+    if (sessionStore.currentSession) {
+      await productStore.fetchTodayProducts()
+    }
+  } catch (e) {
+    addToast({ type: 'danger', message: 'Gagal memuat data' })
+  }
+}
+
+onMounted(() => {
+  loadAllData()
+})
+
+const getProductCountForUmkm = (umkmId: string) => {
+  return productStore.products.filter(p => p.umkm_id === umkmId).length
+}
+
+const handleOpenAddUmkm = () => {
+  newUmkmName.value = ''
+  newUmkmWa.value = ''
+  isAddUmkmOpen.value = true
+}
+
+const handleAddUmkmSubmit = async () => {
+  if (!newUmkmName.value.trim() || !newUmkmWa.value.trim()) return
+  
+  // Basic WA check (must be country code format without +, e.g., 628...)
+  let waClean = newUmkmWa.value.replace(/[^0-9]/g, '')
+  if (!waClean.startsWith('62')) {
+    addToast({ type: 'warning', message: 'Nomor WhatsApp harus dimulai dengan kode negara 62' })
+    return
+  }
+
+  isSubmitting.value = true
+  try {
+    await umkmStore.addUmkm(newUmkmName.value, waClean)
+    isAddUmkmOpen.value = false
+    addToast({ type: 'success', message: 'Mitra UMKM berhasil didaftarkan' })
+  } catch (e) {
+    addToast({ type: 'danger', message: 'Gagal mendaftarkan mitra' })
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+// Edit UMKM State
+const isEditUmkmOpen = ref(false)
+const editingUmkm = ref<any>(null)
+const editUmkmName = ref('')
+const editUmkmWa = ref('')
+const isEditSubmitting = ref(false)
+
+const handleOpenEditUmkm = (umkm: any) => {
+  editingUmkm.value = umkm
+  editUmkmName.value = umkm.nama_umkm
+  editUmkmWa.value = umkm.kontak_wa
+  isEditUmkmOpen.value = true
+}
+
+const handleEditUmkmSubmit = async () => {
+  if (!editingUmkm.value || !editUmkmName.value.trim() || !editUmkmWa.value.trim()) return
+
+  let waClean = editUmkmWa.value.replace(/[^0-9]/g, '')
+  if (!waClean.startsWith('62')) {
+    addToast({ type: 'warning', message: 'Nomor WhatsApp harus dimulai dengan kode negara 62' })
+    return
+  }
+
+  isEditSubmitting.value = true
+  try {
+    await umkmStore.updateUmkm(editingUmkm.value.id, {
+      nama_umkm: editUmkmName.value.trim(),
+      kontak_wa: waClean
+    })
+    isEditUmkmOpen.value = false
+    addToast({ type: 'success', message: 'Mitra UMKM berhasil diperbarui' })
+  } catch (e) {
+    addToast({ type: 'danger', message: 'Gagal memperbarui mitra' })
+  } finally {
+    isEditSubmitting.value = false
+  }
+}
+</script>
+
+<template>
+  <div class="min-h-screen bg-slate-50 flex flex-col">
+    <!-- Header -->
+    <header class="bg-brand-900 text-white px-4 py-3 shadow-md flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <NuxtLink to="/admin" class="hover:text-brand-100 transition mr-1 flex items-center">
+          <Icon name="heroicons:arrow-left" class="w-5 h-5" />
+        </NuxtLink>
+        <h1 class="text-xl font-black tracking-tight">Setup Sesi</h1>
+      </div>
+      <AppButton
+        @click="handleOpenAddUmkm"
+        variant="secondary"
+        size="sm"
+        v-if="umkmStore.umkmList.length < 7"
+      >
+        Tambah UMKM
+      </AppButton>
+    </header>
+
+    <!-- Content -->
+    <main class="flex-grow p-6 max-w-3xl w-full mx-auto flex flex-col gap-6">
+      
+      <!-- Session Action Card -->
+      <div v-if="!sessionStore.currentSession" class="bg-white border p-6 rounded-2xl shadow-sm text-center flex flex-col items-center gap-4">
+        <Icon name="heroicons:calendar-days" class="w-12 h-12 text-slate-400" />
+        <h2 class="text-md font-bold text-slate-800">Mulai Sesi Baru</h2>
+        <p class="text-xs text-slate-500 font-medium max-w-md">
+          Belum ada sesi penjualan yang dibuat untuk hari ini ({{ useSessionDate().formattedToday.value }}). Silakan buat sesi terlebih dahulu.
+        </p>
+        <AppButton @click="sessionStore.openSession(authStore.user?.id || '')">
+          Buat Sesi Hari Ini
+        </AppButton>
+      </div>
+
+      <template v-else>
+        <div class="flex justify-between items-center">
+          <h2 class="text-sm font-bold text-slate-700">Daftar Mitra UMKM (Hari Ini)</h2>
+          <span class="text-xs text-slate-500 font-mono font-bold">{{ sessionStore.sessionDate }}</span>
+        </div>
+
+        <div v-if="umkmStore.umkmList.length === 0" class="text-center py-12 bg-white rounded-2xl border border-dashed">
+          <p class="text-slate-400 text-sm">Belum ada mitra UMKM terdaftar.</p>
+        </div>
+
+        <!-- UMKM List Cards -->
+        <div v-else class="flex flex-col gap-3">
+          <div
+            v-for="u in umkmStore.umkmList"
+            :key="u.id"
+            class="bg-white border border-slate-150 rounded-2xl p-5 shadow-sm flex items-center justify-between hover:shadow-md transition"
+          >
+            <div class="flex flex-col gap-1">
+              <h3 class="font-bold text-slate-800 text-sm">{{ u.nama_umkm }}</h3>
+              <p class="text-xs font-mono font-bold text-slate-400">WA: {{ u.kontak_wa }}</p>
+              <div class="mt-2">
+                <span class="text-xs bg-brand-50 text-brand-900 font-bold px-2 py-0.5 rounded-full">
+                  {{ getProductCountForUmkm(u.id) }} Produk Hari Ini
+                </span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button
+                @click="handleOpenEditUmkm(u)"
+                class="p-1.5 text-slate-400 hover:text-brand-900 hover:bg-slate-100 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
+                title="Edit Mitra"
+              >
+                <Icon name="heroicons:pencil-square" class="w-5 h-5" />
+              </button>
+              <NuxtLink :to="`/admin/setup/${u.id}`">
+                <AppButton variant="primary" size="sm">
+                  Kelola Produk
+                </AppButton>
+              </NuxtLink>
+            </div>
+          </div>
+        </div>
+
+        <!-- closed banner warning -->
+        <div v-if="sessionStore.isClosed" class="p-4 bg-danger/10 border border-danger/20 rounded-xl text-center text-xs font-semibold text-danger">
+          Pemberitahuan: Sesi sudah ditutup. Anda tidak dapat memodifikasi catalog produk atau stok lagi.
+        </div>
+      </template>
+
+    </main>
+
+    <!-- Add UMKM Modal -->
+    <AppModal
+      v-model="isAddUmkmOpen"
+      title="Daftarkan UMKM Baru"
+    >
+      <div class="flex flex-col gap-4 py-2">
+        <AppInput
+          v-model="newUmkmName"
+          label="Nama UMKM / Pemilik"
+          placeholder="Contoh: Ibu Sari"
+          required
+        />
+
+        <AppInput
+          v-model="newUmkmWa"
+          label="Nomor WhatsApp"
+          placeholder="Contoh: 6281234567890"
+          hint="Gunakan kode negara (62) di depan, tanpa spasi/karakter spesial"
+          required
+        />
+      </div>
+      <template #footer>
+        <AppButton variant="secondary" @click="isAddUmkmOpen = false">Batal</AppButton>
+        <AppButton :loading="isSubmitting" @click="handleAddUmkmSubmit">Simpan</AppButton>
+      </template>
+    </AppModal>
+
+    <!-- Edit UMKM Modal -->
+    <AppModal
+      v-model="isEditUmkmOpen"
+      title="Edit Mitra UMKM"
+    >
+      <div class="flex flex-col gap-4 py-2">
+        <AppInput
+          v-model="editUmkmName"
+          label="Nama UMKM / Pemilik"
+          placeholder="Contoh: Ibu Sari"
+          required
+        />
+
+        <AppInput
+          v-model="editUmkmWa"
+          label="Nomor WhatsApp"
+          placeholder="Contoh: 6281234567890"
+          hint="Gunakan kode negara (62) di depan, tanpa spasi/karakter spesial"
+          required
+        />
+      </div>
+      <template #footer>
+        <AppButton variant="secondary" @click="isEditUmkmOpen = false">Batal</AppButton>
+        <AppButton :loading="isEditSubmitting" @click="handleEditUmkmSubmit">Simpan Perubahan</AppButton>
+      </template>
+    </AppModal>
+
+    <AppToast />
+  </div>
+</template>
