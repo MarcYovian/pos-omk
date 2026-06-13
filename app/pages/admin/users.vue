@@ -20,6 +20,7 @@ interface UserRecord {
   id: string
   email: string
   role: 'admin' | 'cashier'
+  is_active: boolean
   created_at: string
   last_sign_in_at: string | null
 }
@@ -182,6 +183,32 @@ const handleSendResetEmail = async (email: string) => {
     addToast({ type: 'danger', message: e.message || 'Gagal mengirim email reset sandi' })
   }
 }
+
+const isTogglingActive = ref<Record<string, boolean>>({})
+
+const handleToggleActive = async (user: UserRecord) => {
+  if (user.email === 'marcellinusyovian@gmail.com') return
+  isTogglingActive.value[user.id] = true
+  try {
+    const { error } = await supabase.rpc('admin_toggle_user_active', {
+      p_user_id: user.id,
+      p_is_active: !user.is_active
+    })
+    if (error) throw error
+    addToast({
+      type: 'success',
+      message: `Status pengguna ${user.email} berhasil diubah`
+    })
+    await fetchUsers()
+  } catch (e: any) {
+    addToast({
+      type: 'danger',
+      message: e.message || 'Gagal mengubah status aktif pengguna'
+    })
+  } finally {
+    isTogglingActive.value[user.id] = false
+  }
+}
 </script>
 
 <template>
@@ -236,6 +263,12 @@ const handleSendResetEmail = async (email: string) => {
                 >
                   {{ u.role }}
                 </span>
+                <span
+                  class="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                  :class="u.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-50 text-slate-500 border border-slate-100'"
+                >
+                  {{ u.is_active ? 'Aktif' : 'Nonaktif' }}
+                </span>
                 <span v-if="u.id === authStore.user?.id" class="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 font-bold px-2 py-0.5 rounded-full">
                   Anda
                 </span>
@@ -243,6 +276,17 @@ const handleSendResetEmail = async (email: string) => {
             </div>
 
             <div class="flex gap-1">
+              <!-- Toggle active/inactive status (for marcellinusyovian@gmail.com only) -->
+              <button
+                v-if="authStore.user?.email === 'marcellinusyovian@gmail.com' && u.email !== 'marcellinusyovian@gmail.com'"
+                @click="handleToggleActive(u)"
+                :disabled="isTogglingActive[u.id]"
+                class="p-1.5 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center disabled:opacity-50"
+                :class="u.is_active ? 'text-slate-400 hover:text-danger hover:bg-red-50' : 'text-slate-400 hover:text-emerald-600 hover:bg-green-50'"
+                :title="u.is_active ? 'Nonaktifkan Pengguna' : 'Aktifkan Pengguna'"
+              >
+                <Icon :name="u.is_active ? 'heroicons:no-symbol' : 'heroicons:check-circle'" class="w-5 h-5" />
+              </button>
               <button
                 @click="handleSendResetEmail(u.email)"
                 class="p-1.5 text-slate-400 hover:text-warning hover:bg-amber-50 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"

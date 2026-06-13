@@ -150,6 +150,26 @@ export const useProductStore = defineStore('products', () => {
     }
   }
 
+  const deleteProduct = async (productId: string) => {
+    const supabase = useSupabase()
+    isLoading.value = true
+    error.value = null
+    try {
+      const { error: deleteError } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', productId)
+
+      if (deleteError) throw deleteError
+      await fetchTodayProducts()
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : 'Unknown error'
+      throw e
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   return {
     products,
     isLoading,
@@ -160,6 +180,7 @@ export const useProductStore = defineStore('products', () => {
     updateProductStock,
     toggleActive,
     updateProduct,
+    deleteProduct,
     subscribeRealtime,
     unsubscribeRealtime,
   }

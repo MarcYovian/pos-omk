@@ -11,4 +11,9 @@ export default defineNuxtRouteMiddleware((to, from) => {
   if (!user.value) {
     return navigateTo('/login')
   }
+
+  if (user.value?.user_metadata?.is_active === false) {
+    authStore.logout()
+    return navigateTo('/login')
+  }
 })

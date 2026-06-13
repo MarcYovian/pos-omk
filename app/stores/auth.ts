@@ -26,6 +26,11 @@ export const useAuthStore = defineStore('auth', () => {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
       
+      if (data.user?.user_metadata?.is_active === false) {
+        await supabase.auth.signOut()
+        throw new Error('Akun Anda dinonaktifkan. Silakan hubungi admin.')
+      }
+
       const userRole = data.user?.user_metadata?.role
       role.value = (userRole === 'admin' || userRole === 'cashier') ? userRole : 'cashier'
       return data

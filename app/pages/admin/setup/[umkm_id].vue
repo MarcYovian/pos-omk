@@ -180,6 +180,24 @@ const handleEditProductSubmit = async () => {
     isUpdatingProduct.value = false
   }
 }
+
+const handleDelete = async (productId: string) => {
+  if (sessionStore.isClosed) return
+  if (!confirm('Apakah Anda yakin ingin menghapus produk ini?')) return
+
+  try {
+    await productStore.deleteProduct(productId)
+    addToast({ type: 'success', message: 'Produk berhasil dihapus' })
+  } catch (e: any) {
+    console.error(e)
+    const errorMsg = e?.message || ''
+    if (errorMsg.includes('foreign key constraint') || errorMsg.includes('violates foreign key')) {
+      addToast({ type: 'danger', message: 'Gagal menghapus: Produk ini sudah memiliki transaksi hari ini.' })
+    } else {
+      addToast({ type: 'danger', message: 'Gagal menghapus produk' })
+    }
+  }
+}
 </script>
 
 <template>
@@ -279,8 +297,17 @@ const handleEditProductSubmit = async () => {
               </div>
             </div>
             
-            <!-- Active Toggle & Edit Button -->
+            <!-- Active Toggle & Edit/Delete Button -->
             <div class="flex items-center gap-3">
+              <button
+                @click="handleDelete(p.id)"
+                :disabled="sessionStore.isClosed"
+                class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50 min-h-[32px] min-w-[32px] flex items-center justify-center"
+                title="Hapus Produk"
+              >
+                <Icon name="heroicons:trash" class="w-5 h-5" />
+              </button>
+
               <button
                 @click="openEditModal(p as ProductAdmin)"
                 :disabled="sessionStore.isClosed"

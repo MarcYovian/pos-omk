@@ -307,6 +307,24 @@ export interface Database {
         }
         Returns: Json
       }
+      get_all_users: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      admin_toggle_user_active: {
+        Args: {
+          p_user_id: string
+          p_is_active: boolean
+        }
+        Returns: void
+      }
+      reset_session: {
+        Args: {
+          p_session_id: string
+          p_admin_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

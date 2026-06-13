@@ -5,6 +5,8 @@ import { useSessionStore } from '~/stores/session'
 import { onMounted, computed, ref } from 'vue'
 import AppButton from '~/components/ui/AppButton.vue'
 import AppToast from '~/components/ui/AppToast.vue'
+import AppModal from '~/components/ui/AppModal.vue'
+import AppInput from '~/components/ui/AppInput.vue'
 import { useToast } from '~/composables/useToast'
 
 definePageMeta({
@@ -17,6 +19,32 @@ const { addToast } = useToast()
 
 const isReopening = ref(false)
 const canReopen = computed(() => !!authStore.user?.user_metadata?.can_reopen_session)
+
+const isResetting = ref(false)
+const showResetConfirm = ref(false)
+const resetConfirmInput = ref('')
+
+const handleResetSession = async () => {
+  if (resetConfirmInput.value !== 'RESET SESI') return
+  isResetting.value = true
+  try {
+    if (!authStore.user?.id) throw new Error('Admin tidak teridentifikasi')
+    await sessionStore.resetSession(authStore.user.id)
+    addToast({
+      type: 'success',
+      message: 'Sesi berhasil di-reset menjadi kosong.'
+    })
+    showResetConfirm.value = false
+    resetConfirmInput.value = ''
+  } catch (e: any) {
+    addToast({
+      type: 'danger',
+      message: e.message || 'Gagal mereset sesi'
+    })
+  } finally {
+    isResetting.value = false
+  }
+}
 
 onMounted(() => {
   sessionStore.fetchTodaySession()
@@ -132,6 +160,17 @@ const handleReopenSession = async () => {
           >
             Mulai Sesi Baru
           </AppButton>
+          
+          <!-- Reset button for marcellinusyovian@gmail.com -->
+          <AppButton
+            v-if="sessionStore.currentSession && authStore.user?.email === 'marcellinusyovian@gmail.com'"
+            @click="showResetConfirm = true"
+            variant="danger"
+            size="sm"
+            class="mt-2 w-full font-bold text-xs shadow-md border-0"
+          >
+            Reset Sesi Hari Ini
+          </AppButton>
         </div>
       </div>
 
@@ -223,6 +262,46 @@ const handleReopenSession = async () => {
       </div>
 
     </main>
+
+    <!-- Confirmation Modal: Reset Session -->
+    <AppModal
+      v-model="showResetConfirm"
+      title="Reset Sesi Hari Ini?"
+      size="sm"
+    >
+      <div class="flex flex-col gap-3 py-1">
+        <p class="text-sm text-slate-600 leading-relaxed">
+          Tindakan ini akan **menghapus semua data transaksi kasir, detail penjualan, dan rekonsiliasi** untuk sesi hari ini secara permanen. Stok produk akan dikembalikan ke stok awal.
+        </p>
+        <div class="p-3 bg-red-50 border border-red-100 rounded-xl flex gap-2 items-start">
+          <Icon name="heroicons:exclamation-triangle" class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <p class="text-xs font-bold text-red-700 leading-normal">
+            Tindakan ini bersifat destruktif dan tidak bisa dibatalkan!
+          </p>
+        </div>
+        <div class="flex flex-col gap-1.5 mt-2">
+          <label class="text-xs text-slate-500 font-bold">Ketik <span class="text-red-650 font-mono">RESET SESI</span> untuk melanjutkan:</label>
+          <AppInput
+            v-model="resetConfirmInput"
+            placeholder="RESET SESI"
+            class="text-center font-mono font-bold text-red-600 uppercase"
+          />
+        </div>
+      </div>
+      <template #footer>
+        <AppButton variant="secondary" @click="showResetConfirm = false; resetConfirmInput = ''" class="!rounded-xl font-bold">Batal</AppButton>
+        <AppButton 
+          variant="danger" 
+          :disabled="resetConfirmInput !== 'RESET SESI'" 
+          :loading="isResetting" 
+          @click="handleResetSession" 
+          class="!rounded-xl font-bold"
+        >
+          Ya, Reset Sesi
+        </AppButton>
+      </template>
+    </AppModal>
+
     <AppToast />
   </div>
 </template>

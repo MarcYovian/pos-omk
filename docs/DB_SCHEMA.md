@@ -558,7 +558,25 @@ DECLARE
 
 ---
 
-### 4.4 `get_session_financial_summary`
+### 4.4 `reset_session`
+
+**Purpose:** Reset session by deleting all transaction and reconciliation data, setting stock to stok_awal, and opening status. Restricted to `marcellinusyovian@gmail.com`.
+
+```sql
+CREATE OR REPLACE FUNCTION public.reset_session(
+  p_session_id  UUID,
+  p_admin_id    UUID
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+...
+```
+
+---
+
+### 4.5 `get_session_financial_summary`
 
 **Purpose:** Efficient aggregation query for the admin revenue split dashboard.
 
