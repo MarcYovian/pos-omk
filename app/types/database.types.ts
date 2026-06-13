@@ -287,9 +287,23 @@ export interface Database {
         }
         Returns: Json
       }
+      reopen_session: {
+        Args: {
+          p_session_id: string
+          p_admin_id: string
+        }
+        Returns: Json
+      }
       get_session_financial_summary: {
         Args: {
           p_session_id: string
+        }
+        Returns: Json
+      }
+      get_umkm_product_breakdown: {
+        Args: {
+          p_session_id: string
+          p_umkm_id: string
         }
         Returns: Json
       }

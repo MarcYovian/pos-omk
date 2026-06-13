@@ -25,6 +25,29 @@ const isAddUmkmOpen = ref(false)
 const newUmkmName = ref('')
 const newUmkmWa = ref('')
 const isSubmitting = ref(false)
+const isReopening = ref(false)
+
+const canReopen = computed(() => !!authStore.user?.user_metadata?.can_reopen_session)
+
+const handleReopenSession = async () => {
+  isReopening.value = true
+  try {
+    if (!authStore.user?.id) throw new Error('Admin tidak teridentifikasi')
+    await sessionStore.reopenSession(authStore.user.id)
+    addToast({
+      type: 'success',
+      message: 'Sesi berhasil dibuka kembali.'
+    })
+    await loadAllData()
+  } catch (e: any) {
+    addToast({
+      type: 'danger',
+      message: e.message || 'Gagal membuka kembali sesi'
+    })
+  } finally {
+    isReopening.value = false
+  }
+}
 
 const loadAllData = async () => {
   try {
@@ -116,18 +139,22 @@ const handleEditUmkmSubmit = async () => {
 <template>
   <div class="min-h-screen bg-slate-50 flex flex-col">
     <!-- Header -->
-    <header class="bg-brand-900 text-white px-4 py-3 shadow-md flex items-center justify-between">
+    <header class="sticky top-0 z-30 bg-gradient-to-r from-brand-900 to-brand-700 text-white px-4 py-4 shadow-md flex items-center justify-between backdrop-blur-md">
       <div class="flex items-center gap-3">
-        <NuxtLink to="/admin" class="hover:text-brand-100 transition mr-1 flex items-center">
+        <NuxtLink to="/admin" class="hover:bg-white/10 p-2 rounded-xl transition flex items-center justify-center">
           <Icon name="heroicons:arrow-left" class="w-5 h-5" />
         </NuxtLink>
-        <h1 class="text-xl font-black tracking-tight">Setup Sesi</h1>
+        <div>
+          <h1 class="text-lg font-black tracking-tight leading-none">Setup Sesi</h1>
+          <p class="text-[10px] text-brand-200 mt-1 font-medium font-mono">Layanan Pengelola</p>
+        </div>
       </div>
       <AppButton
         @click="handleOpenAddUmkm"
         variant="secondary"
         size="sm"
         v-if="umkmStore.umkmList.length < 7"
+        class="!bg-white !text-brand-900 hover:!bg-slate-100 border-0 text-xs font-bold shadow-sm animate-none"
       >
         Tambah UMKM
       </AppButton>
@@ -192,8 +219,18 @@ const handleEditUmkmSubmit = async () => {
         </div>
 
         <!-- closed banner warning -->
-        <div v-if="sessionStore.isClosed" class="p-4 bg-danger/10 border border-danger/20 rounded-xl text-center text-xs font-semibold text-danger">
-          Pemberitahuan: Sesi sudah ditutup. Anda tidak dapat memodifikasi catalog produk atau stok lagi.
+        <div v-if="sessionStore.isClosed" class="p-4 bg-danger/10 border border-danger/20 rounded-xl text-xs font-semibold text-danger flex flex-col md:flex-row items-center justify-between gap-3">
+          <span>Pemberitahuan: Sesi sudah ditutup. Anda tidak dapat memodifikasi katalog produk atau stok lagi.</span>
+          <AppButton
+            v-if="canReopen"
+            @click="handleReopenSession"
+            variant="danger"
+            size="sm"
+            class="text-xs font-bold font-sans self-center !bg-danger/25 !text-danger hover:!bg-danger/40 border-0"
+            :loading="isReopening"
+          >
+            Buka Kembali Sesi
+          </AppButton>
         </div>
       </template>
 

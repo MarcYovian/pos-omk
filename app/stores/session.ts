@@ -83,6 +83,29 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  const reopenSession = async (adminId: string) => {
+    const supabase = useSupabase()
+    isLoading.value = true
+    error.value = null
+    try {
+      if (!sessionId.value) throw new Error('No active session to reopen.')
+      const { data, error: reopenError } = await supabase.rpc('reopen_session', {
+        p_session_id: sessionId.value,
+        p_admin_id: adminId
+      })
+
+      if (reopenError) throw reopenError
+      // Refetch today session to sync local state
+      await fetchTodaySession()
+      return data
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : 'Unknown error'
+      throw e
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   return {
     currentSession,
     sessionDate,
@@ -93,6 +116,7 @@ export const useSessionStore = defineStore('session', () => {
     sessionId,
     fetchTodaySession,
     openSession,
-    closeSession
+    closeSession,
+    reopenSession
   }
 })

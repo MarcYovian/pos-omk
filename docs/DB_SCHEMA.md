@@ -538,7 +538,27 @@ $$;
 
 ---
 
-### 4.3 `get_session_financial_summary`
+### 4.3 `reopen_session`
+
+**Purpose:** Reopen a closed session. Restricted to users with `can_reopen_session` metadata claim.
+
+```sql
+CREATE OR REPLACE FUNCTION public.reopen_session(
+  p_session_id  UUID,
+  p_admin_id    UUID
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_is_authorized BOOLEAN;
+...
+```
+
+---
+
+### 4.4 `get_session_financial_summary`
 
 **Purpose:** Efficient aggregation query for the admin revenue split dashboard.
 
@@ -697,6 +717,9 @@ CREATE POLICY "reconciliation_read_admin" ON public.reconciliation
 
 CREATE POLICY "reconciliation_write_admin" ON public.reconciliation
   FOR INSERT WITH CHECK (public.get_user_role() = 'admin');
+
+CREATE POLICY "reconciliation_update_admin" ON public.reconciliation
+  FOR UPDATE USING (public.get_user_role() = 'admin');
 ```
 
 ---

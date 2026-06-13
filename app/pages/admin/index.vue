@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
 import { useSessionStore } from '~/stores/session'
-import { onMounted } from 'vue'
+import { onMounted, computed, ref } from 'vue'
 import AppButton from '~/components/ui/AppButton.vue'
 import AppToast from '~/components/ui/AppToast.vue'
 import { useToast } from '~/composables/useToast'
@@ -15,83 +15,140 @@ const authStore = useAuthStore()
 const sessionStore = useSessionStore()
 const { addToast } = useToast()
 
+const isReopening = ref(false)
+const canReopen = computed(() => !!authStore.user?.user_metadata?.can_reopen_session)
+
 onMounted(() => {
   sessionStore.fetchTodaySession()
 })
+
+const handleReopenSession = async () => {
+  isReopening.value = true
+  try {
+    if (!authStore.user?.id) throw new Error('Admin tidak teridentifikasi')
+    await sessionStore.reopenSession(authStore.user.id)
+    addToast({
+      type: 'success',
+      message: 'Sesi berhasil dibuka kembali.'
+    })
+  } catch (e: any) {
+    addToast({
+      type: 'danger',
+      message: e.message || 'Gagal membuka kembali sesi'
+    })
+  } finally {
+    isReopening.value = false
+  }
+}
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-50 flex flex-col">
+  <div class="min-h-screen bg-slate-50 flex flex-col font-sans">
     <!-- Header -->
-    <header class="bg-brand-900 text-white px-4 py-3 shadow-md flex items-center justify-between">
+    <header class="sticky top-0 z-30 bg-gradient-to-r from-brand-900 to-brand-700 text-white px-4 py-4 shadow-md flex items-center justify-between backdrop-blur-md">
       <div class="flex items-center gap-3">
-        <h1 class="text-xl font-black tracking-tight">Admin OMK POS</h1>
-        <span class="text-xs bg-white/20 px-2 py-0.5 rounded font-semibold text-white/95 uppercase">
-          Admin
-        </span>
+        <div class="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/10 shadow-inner">
+          <Icon name="heroicons:shield-check" class="w-6 h-6 text-brand-200" />
+        </div>
+        <div>
+          <h1 class="text-lg font-black tracking-tight leading-none">Admin OMK POS</h1>
+          <p class="text-[10px] text-brand-200 mt-1 font-semibold font-mono uppercase tracking-wider">Layanan Pengelola</p>
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <NuxtLink
           to="/pos"
-          class="text-xs bg-brand-600 hover:bg-brand-500 font-semibold px-3 py-1.5 rounded-lg transition"
+          class="text-xs bg-white text-brand-900 hover:bg-slate-100 font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm"
         >
-          Masuk Kasir
+          <Icon name="heroicons:shopping-cart" class="w-4 h-4 text-brand-900" />
+          <span>Layar Kasir</span>
         </NuxtLink>
         <button
           @click="authStore.logout()"
-          class="text-xs bg-white/10 hover:bg-white/20 font-semibold px-3 py-1.5 rounded-lg transition"
+          class="text-xs bg-danger text-white hover:bg-red-700 font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm"
         >
-          Keluar
+          <Icon name="heroicons:arrow-right-on-rectangle" class="w-4 h-4" />
+          <span>Keluar</span>
         </button>
       </div>
     </header>
 
     <!-- Content -->
-    <main class="flex-grow p-6 max-w-4xl w-full mx-auto flex flex-col gap-6">
+    <main class="flex-grow p-4 md:p-6 max-w-4xl w-full mx-auto flex flex-col gap-6">
       
-      <!-- Session Status Banner -->
-      <div
-        class="p-5 rounded-2xl shadow-sm border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
-        :class="{
-          'bg-green-50 border-green-200 text-green-800': sessionStore.isOpen,
-          'bg-red-50 border-red-200 text-red-800': sessionStore.isClosed,
-          'bg-slate-100 border-slate-200 text-slate-700': !sessionStore.currentSession
-        }"
-      >
-        <div>
-          <h2 class="text-md font-bold">
-            Status Sesi Hari Ini: 
-            <span v-if="sessionStore.isOpen" class="uppercase">Aktif / Terbuka</span>
-            <span v-else-if="sessionStore.isClosed" class="uppercase">Selesai / Terkunci</span>
-            <span v-else class="uppercase">Belum Dibuat</span>
-          </h2>
-          <p class="text-xs mt-1 opacity-90 font-medium">
-            Tanggal Sesi: {{ useSessionDate().formattedToday.value }}
-          </p>
+      <!-- Welcome card -->
+      <div class="bg-gradient-to-br from-brand-900 to-brand-700 rounded-3xl p-6 shadow-xl text-white relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div class="absolute -right-16 -top-16 w-48 h-48 bg-white/5 rounded-full blur-2xl pointer-events-none"></div>
+        <div class="absolute -left-16 -bottom-16 w-48 h-48 bg-brand-500/10 rounded-full blur-2xl pointer-events-none"></div>
+        
+        <div class="flex flex-col gap-1.5 z-10">
+          <span class="text-xs text-brand-200 font-extrabold uppercase tracking-widest font-mono">Halo Admin,</span>
+          <h2 class="text-xl md:text-2xl font-black tracking-tight leading-snug break-all">{{ authStore.user?.email }}</h2>
+          <p class="text-xs text-brand-100 font-medium mt-1">Selamat bertugas! Kelola data sesi hari ini dengan teliti.</p>
         </div>
-        <div v-if="!sessionStore.currentSession" class="flex-shrink-0">
+
+        <div class="z-10 bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 flex flex-col gap-2 min-w-[200px] shadow-lg">
+          <span class="text-[10px] text-brand-200 font-extrabold uppercase tracking-wider font-mono">Status Sesi Hari Ini</span>
+          
+          <div class="flex items-center gap-2 mt-1">
+            <span v-if="sessionStore.isOpen" class="inline-flex items-center gap-1.5 text-xs font-bold bg-emerald-500/20 text-emerald-200 px-3 py-1 rounded-full border border-emerald-500/25">
+              <span class="h-2 w-2 rounded-full bg-emerald-400 animate-ping"></span>
+              AKTIF
+            </span>
+            <span v-else-if="sessionStore.isClosed" class="inline-flex items-center gap-1.5 text-xs font-bold bg-rose-500/20 text-rose-200 px-3 py-1 rounded-full border border-rose-500/25">
+              <span class="h-2 w-2 rounded-full bg-rose-400"></span>
+              SELESAI / TERKUNCI
+            </span>
+            <span v-else class="inline-flex items-center gap-1.5 text-xs font-bold bg-slate-500/25 text-slate-200 px-3 py-1 rounded-full border border-white/10">
+              BELUM DIBUAT
+            </span>
+          </div>
+
+          <div class="text-[11px] font-mono text-brand-200 font-semibold mt-1 flex items-center gap-1">
+            <Icon name="heroicons:calendar" class="w-3.5 h-3.5 text-brand-300" />
+            <span>{{ useSessionDate().formattedToday.value }}</span>
+          </div>
+          
+          <!-- Reopen button if closed -->
           <AppButton
-            @click="sessionStore.openSession(authStore.user?.id || '')"
-            size="md"
+            v-if="sessionStore.isClosed && canReopen"
+            @click="handleReopenSession"
+            variant="secondary"
+            size="sm"
+            class="mt-2 w-full !bg-red-500 !text-white hover:!bg-red-650 font-extrabold text-xs shadow-md border-0"
+            :loading="isReopening"
           >
-            Buka Sesi Hari Ini
+            Buka Kembali Sesi
+          </AppButton>
+          
+          <!-- Create session button if not created -->
+          <AppButton
+            v-if="!sessionStore.currentSession"
+            @click="sessionStore.openSession(authStore.user?.id || '')"
+            variant="secondary"
+            size="sm"
+            class="mt-2 w-full font-bold text-xs"
+            :loading="sessionStore.isLoading"
+          >
+            Mulai Sesi Baru
           </AppButton>
         </div>
       </div>
 
       <!-- Quick Actions Grid -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        
         <!-- Setup catalog -->
         <NuxtLink
           to="/admin/setup"
-          class="bg-white border border-slate-150 p-6 rounded-2xl shadow-sm hover:shadow-md transition flex items-start gap-4"
+          class="group bg-white border border-slate-150 p-6 rounded-3xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 flex flex-col gap-4"
         >
-          <div class="p-3 bg-brand-50 text-brand-900 rounded-xl">
+          <div class="p-3.5 bg-brand-50 text-brand-900 rounded-2xl w-fit group-hover:scale-105 transition-transform duration-300 shadow-sm">
             <Icon name="heroicons:cog-8-tooth" class="w-6 h-6" />
           </div>
           <div class="flex flex-col gap-1">
-            <h3 class="font-bold text-slate-800 text-sm">Setup Minggu Ini</h3>
-            <p class="text-xs text-slate-500 font-medium leading-relaxed">
+            <h3 class="font-extrabold text-slate-800 text-sm group-hover:text-brand-900 transition-colors">Setup Minggu Ini</h3>
+            <p class="text-xs text-slate-500 font-medium leading-relaxed mt-1">
               Atur daftar mitra UMKM, harga produk konsinyasi, dan stok awal sebelum lapak dibuka.
             </p>
           </div>
@@ -100,15 +157,15 @@ onMounted(() => {
         <!-- Live revenue split -->
         <NuxtLink
           to="/admin/dashboard"
-          class="bg-white border border-slate-150 p-6 rounded-2xl shadow-sm hover:shadow-md transition flex items-start gap-4"
-          :class="{ 'opacity-50 pointer-events-none': !sessionStore.currentSession }"
+          class="group bg-white border border-slate-150 p-6 rounded-3xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 flex flex-col gap-4"
+          :class="{ 'opacity-50 pointer-events-none bg-slate-50/50 border-slate-100': !sessionStore.currentSession }"
         >
-          <div class="p-3 bg-green-50 text-success rounded-xl">
+          <div class="p-3.5 bg-emerald-50 text-emerald-600 rounded-2xl w-fit group-hover:scale-105 transition-transform duration-300 shadow-sm">
             <Icon name="heroicons:chart-bar" class="w-6 h-6" />
           </div>
           <div class="flex flex-col gap-1">
-            <h3 class="font-bold text-slate-800 text-sm">Dashboard Finansial</h3>
-            <p class="text-xs text-slate-500 font-medium leading-relaxed">
+            <h3 class="font-extrabold text-slate-800 text-sm group-hover:text-emerald-700 transition-colors">Dashboard Finansial</h3>
+            <p class="text-xs text-slate-500 font-medium leading-relaxed mt-1">
               Pantau laporan omset penjualan, pembagian komisi setoran UMKM, dan laba OMK secara real-time.
             </p>
           </div>
@@ -117,15 +174,15 @@ onMounted(() => {
         <!-- reconciliation -->
         <NuxtLink
           to="/admin/reconciliation"
-          class="bg-white border border-slate-150 p-6 rounded-2xl shadow-sm hover:shadow-md transition flex items-start gap-4"
-          :class="{ 'opacity-50 pointer-events-none': !sessionStore.currentSession }"
+          class="group bg-white border border-slate-150 p-6 rounded-3xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 flex flex-col gap-4"
+          :class="{ 'opacity-50 pointer-events-none bg-slate-50/50 border-slate-100': !sessionStore.currentSession }"
         >
-          <div class="p-3 bg-amber-50 text-warning rounded-xl">
+          <div class="p-3.5 bg-amber-50 text-amber-600 rounded-2xl w-fit group-hover:scale-105 transition-transform duration-300 shadow-sm">
             <Icon name="heroicons:clipboard-document-check" class="w-6 h-6" />
           </div>
           <div class="flex flex-col gap-1">
-            <h3 class="font-bold text-slate-800 text-sm">Rekonsiliasi Stok</h3>
-            <p class="text-xs text-slate-500 font-medium leading-relaxed">
+            <h3 class="font-extrabold text-slate-800 text-sm group-hover:text-amber-700 transition-colors">Rekonsiliasi Stok</h3>
+            <p class="text-xs text-slate-500 font-medium leading-relaxed mt-1">
               Catat sisa fisik kue di lapak sore hari, periksa selisih, dan kunci transaksi sesi ini.
             </p>
           </div>
@@ -134,15 +191,15 @@ onMounted(() => {
         <!-- wa report copy -->
         <NuxtLink
           to="/admin/reports"
-          class="bg-white border border-slate-150 p-6 rounded-2xl shadow-sm hover:shadow-md transition flex items-start gap-4"
-          :class="{ 'opacity-50 pointer-events-none': !sessionStore.isClosed }"
+          class="group bg-white border border-slate-150 p-6 rounded-3xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 flex flex-col gap-4"
+          :class="{ 'opacity-50 pointer-events-none bg-slate-50/50 border-slate-100': !sessionStore.isClosed }"
         >
-          <div class="p-3 bg-indigo-50 text-indigo-700 rounded-xl">
+          <div class="p-3.5 bg-indigo-50 text-indigo-700 rounded-2xl w-fit group-hover:scale-105 transition-transform duration-300 shadow-sm">
             <Icon name="heroicons:chat-bubble-bottom-center-text" class="w-6 h-6" />
           </div>
           <div class="flex flex-col gap-1">
-            <h3 class="font-bold text-slate-800 text-sm">Laporan WhatsApp</h3>
-            <p class="text-xs text-slate-500 font-medium leading-relaxed">
+            <h3 class="font-extrabold text-slate-800 text-sm group-hover:text-indigo-800 transition-colors">Laporan WhatsApp</h3>
+            <p class="text-xs text-slate-500 font-medium leading-relaxed mt-1">
               Salin teks rincian laporan otomatis untuk dikirim ke masing-masing mitra UMKM.
             </p>
           </div>
@@ -151,15 +208,15 @@ onMounted(() => {
         <!-- user management -->
         <NuxtLink
           to="/admin/users"
-          class="bg-white border border-slate-150 p-6 rounded-2xl shadow-sm hover:shadow-md transition flex items-start gap-4"
+          class="group bg-white border border-slate-150 p-6 rounded-3xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 flex flex-col gap-4"
         >
-          <div class="p-3 bg-red-50 text-red-700 rounded-xl">
+          <div class="p-3.5 bg-rose-50 text-rose-700 rounded-2xl w-fit group-hover:scale-105 transition-transform duration-300 shadow-sm">
             <Icon name="heroicons:users" class="w-6 h-6" />
           </div>
           <div class="flex flex-col gap-1">
-            <h3 class="font-bold text-slate-800 text-sm">Kelola Pengguna</h3>
-            <p class="text-xs text-slate-500 font-medium leading-relaxed">
-              Daftarkan kasir baru, perbarui sandi, ubah peran (role), atau hapus akun pengguna.
+            <h3 class="font-extrabold text-slate-800 text-sm group-hover:text-rose-800 transition-colors">Kelola Pengguna</h3>
+            <p class="text-xs text-slate-500 font-medium leading-relaxed mt-1">
+              Daftarkan kasir baru, kirim email reset sandi, ubah peran (role), atau kelola akun pengguna.
             </p>
           </div>
         </NuxtLink>

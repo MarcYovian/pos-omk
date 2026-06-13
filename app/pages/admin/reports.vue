@@ -63,7 +63,7 @@ const loadReportData = async () => {
     const { data: reconData, error: reconErr } = await supabase
       .from('reconciliation')
       .select('product_id, stok_fisik')
-      .eq('session_id', sessionStore.sessionId)
+      .eq('session_id', sessionStore.sessionId as string)
 
     if (reconErr) throw reconErr
 
@@ -134,12 +134,15 @@ const toggleSent = (umkmId: string) => {
 <template>
   <div class="min-h-screen bg-slate-50 flex flex-col">
     <!-- Header -->
-    <header class="bg-brand-900 text-white px-4 py-3 shadow-md flex items-center justify-between">
+    <header class="sticky top-0 z-30 bg-gradient-to-r from-brand-900 to-brand-700 text-white px-4 py-4 shadow-md flex items-center justify-between backdrop-blur-md">
       <div class="flex items-center gap-3">
-        <NuxtLink to="/admin" class="hover:text-brand-100 transition mr-1 flex items-center">
+        <NuxtLink to="/admin" class="hover:bg-white/10 p-2 rounded-xl transition flex items-center justify-center">
           <Icon name="heroicons:arrow-left" class="w-5 h-5" />
         </NuxtLink>
-        <h1 class="text-xl font-black tracking-tight">Laporan WhatsApp</h1>
+        <div>
+          <h1 class="text-lg font-black tracking-tight leading-none">Laporan WhatsApp</h1>
+          <p class="text-[10px] text-brand-200 mt-1 font-medium font-mono">Layanan Pengelola</p>
+        </div>
       </div>
     </header>
 

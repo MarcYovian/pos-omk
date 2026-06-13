@@ -185,14 +185,14 @@ const handleEditProductSubmit = async () => {
 <template>
   <div class="min-h-screen bg-slate-50 flex flex-col">
     <!-- Header -->
-    <header class="bg-brand-900 text-white px-4 py-3 shadow-md flex items-center justify-between">
+    <header class="sticky top-0 z-30 bg-gradient-to-r from-brand-900 to-brand-700 text-white px-4 py-4 shadow-md flex items-center justify-between backdrop-blur-md">
       <div class="flex items-center gap-3">
-        <NuxtLink to="/admin/setup" class="hover:text-brand-100 transition mr-1 flex items-center">
+        <NuxtLink to="/admin/setup" class="hover:bg-white/10 p-2 rounded-xl transition flex items-center justify-center">
           <Icon name="heroicons:arrow-left" class="w-5 h-5" />
         </NuxtLink>
         <div class="flex flex-col">
           <h1 class="text-md font-black tracking-tight leading-tight">Kelola Produk</h1>
-          <p class="text-xs text-white/85 font-semibold leading-none mt-0.5">
+          <p class="text-xs text-brand-200 font-semibold font-mono leading-none mt-0.5">
             {{ currentUmkm?.nama_umkm || 'Memuat...' }}
           </p>
         </div>
