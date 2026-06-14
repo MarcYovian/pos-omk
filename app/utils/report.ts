@@ -21,12 +21,13 @@ export function generateUMKMReport(umkm: UMKM, products: ProductReport[], sessio
   const productLines = products.map(p => {
     const qtySold = p.stok_awal - p.stok_sekarang;
     const qtyReturned = p.stok_fisik;
-    return `• ${p.nama_produk}: ${qtySold} terjual, ${qtyReturned} dikembalikan`;
+    const formattedTotal = new Intl.NumberFormat('id-ID').format(p.remittance_due);
+    return `• ${p.nama_produk}: ${qtySold} terjual, ${qtyReturned} dikembalikan (Rp${formattedTotal})`;
   }).join('\n');
 
   const totalSold = products.reduce((sum, p) => sum + (p.stok_awal - p.stok_sekarang), 0);
   const totalRemittance = products.reduce((sum, p) => sum + p.remittance_due, 0);
-  
+
   // Format with dot separator for Indonesian style
   const formattedRemittance = new Intl.NumberFormat('id-ID').format(totalRemittance);
 
@@ -43,5 +44,5 @@ Total terjual: ${totalSold} item
 Total setoran ke ${umkm.nama_umkm}: Rp${formattedRemittance}
 
 Mohon konfirmasi penerimaan. Terima kasih atas kerja samanya! 🙏
-— Tim OMK`;
+— Sie Kewirausahaan OMK`;
 }
