@@ -283,54 +283,71 @@ const handleDelete = async (productId: string) => {
           <div
             v-for="p in umkmProducts"
             :key="p.id"
-            class="bg-white border border-slate-150 rounded-2xl p-4 shadow-sm flex items-center justify-between"
+            class="bg-white border border-slate-150 rounded-2xl p-4 shadow-sm flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
           >
-            <div class="flex flex-col gap-1 w-2/3">
+            <!-- Product Details -->
+            <div class="flex flex-col gap-1 sm:w-2/3">
               <h3 class="font-bold text-slate-800 text-sm leading-snug">{{ p.nama_produk }}</h3>
-              <div class="flex gap-4 text-xs font-mono font-bold text-slate-400 mt-1">
-                <span>Harga UMKM: {{ useCurrencyFormat((p as ProductAdmin).harga_asli) }}</span>
-                <span>Harga POS: {{ useCurrencyFormat(p.harga_jual) }}</span>
-              </div>
-              <div class="flex gap-4 text-xs font-mono font-semibold text-slate-500 mt-1">
-                <span>Stok Awal: {{ p.stok_awal }}</span>
-                <span>Sisa: {{ p.stok_sekarang }}</span>
+              <div class="grid grid-cols-2 gap-x-2 gap-y-1 sm:flex sm:flex-wrap sm:gap-x-4 text-xs mt-1">
+                <div class="text-slate-400 font-mono font-bold flex flex-col sm:flex-row sm:gap-1">
+                  <span class="text-[10px] sm:text-xs">Harga UMKM:</span>
+                  <span>{{ useCurrencyFormat((p as ProductAdmin).harga_asli) }}</span>
+                </div>
+                <div class="text-slate-400 font-mono font-bold flex flex-col sm:flex-row sm:gap-1">
+                  <span class="text-[10px] sm:text-xs">Harga POS:</span>
+                  <span>{{ useCurrencyFormat(p.harga_jual) }}</span>
+                </div>
+                <div class="text-slate-500 font-mono font-semibold flex flex-col sm:flex-row sm:gap-1">
+                  <span class="text-[10px] sm:text-xs">Stok Awal:</span>
+                  <span>{{ p.stok_awal }}</span>
+                </div>
+                <div class="text-slate-500 font-mono font-semibold flex flex-col sm:flex-row sm:gap-1">
+                  <span class="text-[10px] sm:text-xs">Sisa:</span>
+                  <span>{{ p.stok_sekarang }}</span>
+                </div>
               </div>
             </div>
             
             <!-- Active Toggle & Edit/Delete Button -->
-            <div class="flex items-center gap-3">
-              <button
-                @click="handleDelete(p.id)"
-                :disabled="sessionStore.isClosed"
-                class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50 min-h-[32px] min-w-[32px] flex items-center justify-center"
-                title="Hapus Produk"
-              >
-                <Icon name="heroicons:trash" class="w-5 h-5" />
-              </button>
+            <div class="flex items-center justify-between sm:justify-end gap-3 border-t border-slate-100 pt-3 sm:border-t-0 sm:pt-0">
+              <!-- Edit/Delete buttons -->
+              <div class="flex items-center gap-1">
+                <button
+                  @click="handleDelete(p.id)"
+                  :disabled="sessionStore.isClosed"
+                  class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50 min-h-[32px] min-w-[32px] flex items-center justify-center"
+                  title="Hapus Produk"
+                >
+                  <Icon name="heroicons:trash" class="w-5 h-5" />
+                </button>
 
-              <button
-                @click="openEditModal(p as ProductAdmin)"
-                :disabled="sessionStore.isClosed"
-                class="p-1.5 text-slate-400 hover:text-brand-900 hover:bg-slate-100 rounded-lg transition disabled:opacity-50 min-h-[32px] min-w-[32px] flex items-center justify-center"
-                title="Edit Produk"
-              >
-                <Icon name="heroicons:pencil-square" class="w-5 h-5" />
-              </button>
+                <button
+                  @click="openEditModal(p as ProductAdmin)"
+                  :disabled="sessionStore.isClosed"
+                  class="p-1.5 text-slate-400 hover:text-brand-900 hover:bg-slate-100 rounded-lg transition disabled:opacity-50 min-h-[32px] min-w-[32px] flex items-center justify-center"
+                  title="Edit Produk"
+                >
+                  <Icon name="heroicons:pencil-square" class="w-5 h-5" />
+                </button>
+              </div>
 
-              <span class="text-xs font-bold" :class="p.is_active ? 'text-success' : 'text-slate-400'">
-                {{ p.is_active ? 'Aktif' : 'Nonaktif' }}
-              </span>
-              <button
-                @click="handleToggleActive(p as ProductAdmin)"
-                :disabled="sessionStore.isClosed"
-                class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none min-h-[24px] min-w-[44px]"
-                :class="p.is_active ? 'bg-brand-900' : 'bg-slate-200'"
-              >
-                <span
-                  class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                  :class="p.is_active ? 'translate-x-5' : 'translate-x-0'"
-                />
-              </button>
+              <!-- Toggle switch container -->
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold" :class="p.is_active ? 'text-success' : 'text-slate-400'">
+                  {{ p.is_active ? 'Aktif' : 'Nonaktif' }}
+                </span>
+                <button
+                  @click="handleToggleActive(p as ProductAdmin)"
+                  :disabled="sessionStore.isClosed"
+                  class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none min-h-[24px] min-w-[44px]"
+                  :class="p.is_active ? 'bg-brand-900' : 'bg-slate-200'"
+                >
+                  <span
+                    class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                    :class="p.is_active ? 'translate-x-5' : 'translate-x-0'"
+                  />
+                </button>
+              </div>
             </div>
           </div>
         </div>
