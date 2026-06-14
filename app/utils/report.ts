@@ -7,6 +7,7 @@ export interface ProductReport {
   stok_sekarang: number
   stok_fisik: number
   remittance_due: number
+  harga_asli: number
 }
 
 export function generateUMKMReport(umkm: UMKM, products: ProductReport[], sessionDate: Date): string {
@@ -21,9 +22,12 @@ export function generateUMKMReport(umkm: UMKM, products: ProductReport[], sessio
   const productLines = products.map(p => {
     const qtySold = p.stok_awal - p.stok_sekarang;
     const qtyReturned = p.stok_fisik;
+    const formattedHargaAsli = new Intl.NumberFormat('id-ID').format(p.harga_asli);
     const formattedTotal = new Intl.NumberFormat('id-ID').format(p.remittance_due);
-    return `• ${p.nama_produk}: ${qtySold} terjual, ${qtyReturned} dikembalikan (Rp${formattedTotal})`;
-  }).join('\n');
+    return `${p.nama_produk}
+${qtySold} x ${formattedHargaAsli} = Rp ${formattedTotal}
+(Retur: ${qtyReturned})`;
+  }).join('\n\n');
 
   const totalSold = products.reduce((sum, p) => sum + (p.stok_awal - p.stok_sekarang), 0);
   const totalRemittance = products.reduce((sum, p) => sum + p.remittance_due, 0);
@@ -32,17 +36,18 @@ export function generateUMKMReport(umkm: UMKM, products: ProductReport[], sessio
   const formattedRemittance = new Intl.NumberFormat('id-ID').format(totalRemittance);
 
   return `Halo ${umkm.nama_umkm}! 👋
+Izin melaporkan rekap penjualan hari ini ya, Bu:
 
-Berikut laporan penjualan hari ini:
 📅 ${formattedDate}
 
 DETAIL PENJUALAN:
+--------------------------
 ${productLines}
-
+--------------------------
 RINGKASAN:
-Total terjual: ${totalSold} item
-Total setoran ke ${umkm.nama_umkm}: Rp${formattedRemittance}
+📦 Total Terjual : ${totalSold} Item
+💰 Total Setoran : Rp ${formattedRemittance}
 
-Mohon konfirmasi penerimaan. Terima kasih atas kerja samanya! 🙏
+Mohon dicek kembali ya, Bu. Jika sudah sesuai, mohon konfirmasinya. Terima kasih banyak atas kerja samanya! 🙏
 — Sie Kewirausahaan OMK`;
 }

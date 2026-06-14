@@ -243,6 +243,7 @@ CREATE TABLE public.transactions (
   nominal_diterima    INTEGER       NOT NULL CHECK (nominal_diterima >= total_harga_jual),
   kembalian           INTEGER       NOT NULL GENERATED ALWAYS AS
                         (nominal_diterima - total_harga_jual) STORED,
+  metode_pembayaran   VARCHAR(20)   NOT NULL DEFAULT 'cash' CHECK (metode_pembayaran IN ('cash', 'qris')),
   created_at          TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
@@ -252,6 +253,7 @@ COMMENT ON COLUMN public.transactions.cashier_id IS 'auth.users.id of the OMK me
 COMMENT ON COLUMN public.transactions.total_harga_jual IS 'Sum of all subtotal_harga_jual in transaction_details';
 COMMENT ON COLUMN public.transactions.nominal_diterima IS 'Cash handed over by buyer. Must be >= total_harga_jual';
 COMMENT ON COLUMN public.transactions.kembalian IS 'Change to return to buyer. Computed: nominal_diterima - total_harga_jual';
+COMMENT ON COLUMN public.transactions.metode_pembayaran IS 'Payment method: cash or qris';
 ```
 
 **Column Constraints:**
@@ -367,7 +369,8 @@ CREATE OR REPLACE FUNCTION public.complete_transaction(
   p_session_id        UUID,
   p_cashier_id        UUID,
   p_nominal_diterima  INTEGER,
-  p_cart_items        JSONB    -- Array of {product_id, qty, harga_jual, harga_asli}
+  p_cart_items        JSONB,   -- Array of {product_id, qty, harga_jual, harga_asli}
+  p_metode_pembayaran VARCHAR DEFAULT 'cash'
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -417,9 +420,9 @@ BEGIN
       p_nominal_diterima, v_total_harga_jual;
   END IF;
 
-  -- 4. Insert transaction header
-  INSERT INTO public.transactions (session_id, cashier_id, total_harga_jual, nominal_diterima)
-  VALUES (p_session_id, p_cashier_id, v_total_harga_jual, p_nominal_diterima)
+  -- 4. Insert transaction header with payment method
+  INSERT INTO public.transactions (session_id, cashier_id, total_harga_jual, nominal_diterima, metode_pembayaran)
+  VALUES (p_session_id, p_cashier_id, v_total_harga_jual, p_nominal_diterima, p_metode_pembayaran)
   RETURNING id INTO v_transaction_id;
 
   -- 5. For each cart item: lock product row, check stock, decrement, insert detail

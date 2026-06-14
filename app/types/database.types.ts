@@ -125,6 +125,7 @@ export interface Database {
           nominal_diterima: number
           kembalian: number
           created_at: string
+          metode_pembayaran: 'cash' | 'qris'
         }
         Insert: {
           id?: string
@@ -133,6 +134,7 @@ export interface Database {
           total_harga_jual: number
           nominal_diterima: number
           created_at?: string
+          metode_pembayaran?: 'cash' | 'qris'
         }
         Update: {
           id?: string
@@ -141,6 +143,7 @@ export interface Database {
           total_harga_jual?: number
           nominal_diterima?: number
           created_at?: string
+          metode_pembayaran?: 'cash' | 'qris'
         }
         Relationships: [
           {
@@ -277,6 +280,7 @@ export interface Database {
           p_cashier_id: string
           p_nominal_diterima: number
           p_cart_items: Json
+          p_metode_pembayaran?: string
         }
         Returns: Json
       }

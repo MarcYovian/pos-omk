@@ -23,6 +23,7 @@ export const useNetworkStatus = () => {
           cashierId:       tx.cashier_id,
           nominalDiterima: tx.nominal_diterima,
           cartItems:       tx.cart_items,
+          metodePembayaran: tx.metode_pembayaran,
         })
         await markSynced(tx.id)
         syncedCount++

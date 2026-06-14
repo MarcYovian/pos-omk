@@ -83,7 +83,8 @@ const loadReportData = async () => {
           stok_awal: p.stok_awal,
           stok_sekarang: p.stok_sekarang,
           stok_fisik: phys,
-          remittance_due: sold * p.harga_asli
+          remittance_due: sold * p.harga_asli,
+          harga_asli: p.harga_asli
         }
       })
 
@@ -128,6 +129,16 @@ const handleCopyText = async (umkmId: string, umkmName: string) => {
 
 const toggleSent = (umkmId: string) => {
   sentState.value[umkmId] = !sentState.value[umkmId]
+}
+
+const handleSendWA = (phone: string, umkmId: string) => {
+  const text = reports.value[umkmId]
+  if (!text) return
+  
+  const cleanPhone = phone.replace(/[^0-9]/g, '')
+  const encodedText = encodeURIComponent(text)
+  const url = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`
+  window.open(url, '_blank')
 }
 </script>
 
@@ -199,11 +210,21 @@ const toggleSent = (umkmId: string) => {
             <!-- Action buttons -->
             <div class="flex items-center gap-3">
               <AppButton
-                @click="handleCopyText(u.id, u.nama_umkm)"
-                class="flex-grow sm:flex-grow-0"
+                @click="handleSendWA(u.kontak_wa, u.id)"
+                class="flex-grow sm:flex-grow-0 !bg-emerald-600 hover:!bg-emerald-700 !border-0 text-white flex items-center justify-center gap-1.5 font-bold shadow-sm"
                 size="sm"
               >
-                Salin Laporan WA
+                <Icon name="heroicons:chat-bubble-left-right" class="w-3 h-3" />
+                Kirim WA
+              </AppButton>
+              <AppButton
+                @click="handleCopyText(u.id, u.nama_umkm)"
+                class="flex-grow sm:flex-grow-0"
+                variant="secondary"
+                size="sm"
+              >
+                <Icon name="heroicons:clipboard-document" class="w-3 h-3" />
+                Salin
               </AppButton>
               <AppButton
                 @click="toggleSent(u.id)"
@@ -211,7 +232,8 @@ const toggleSent = (umkmId: string) => {
                 size="sm"
                 class="flex-grow sm:flex-grow-0"
               >
-                {{ sentState[u.id] ? 'Batalkan Status' : 'Tandai Terkirim ✓' }}
+                <Icon name="heroicons:check-circle" class="w-3 h-3" />
+                {{ sentState[u.id] ? 'Batal Terkirim' : 'Tandai Terkirim ✓' }}
               </AppButton>
             </div>
           </div>

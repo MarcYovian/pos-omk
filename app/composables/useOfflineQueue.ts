@@ -12,6 +12,7 @@ export interface PendingTransaction {
   cashier_id:        string
   nominal_diterima:  number
   cart_items:        CartItem[]
+  metode_pembayaran: 'cash' | 'qris'
   status:            'pending' | 'synced' | 'failed'
   error_message?:    string
 }

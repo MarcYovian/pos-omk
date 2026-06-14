@@ -33,6 +33,8 @@ const isCheckoutOpen = ref(false)
 const cashInput = ref('')
 const successChange = ref<number | null>(null)
 const successTimer = ref<any>(null)
+const paymentMethod = ref<'cash' | 'qris'>('cash')
+const lastPaymentMethod = ref<'cash' | 'qris'>('cash')
 
 // Numpad state
 const numpadValue = ref('')
@@ -103,6 +105,7 @@ const handleAddToCart = (product: any) => {
 const openCheckout = () => {
   if (cartStore.isEmpty) return
   numpadValue.value = ''
+  paymentMethod.value = 'cash'
   isCartOpen.value = false
   // Small delay to let cart sheet close
   setTimeout(() => { isCheckoutOpen.value = true }, 200)
@@ -142,11 +145,12 @@ const quickAmounts = computed(() => {
 })
 
 const handleCheckoutSubmit = async () => {
-  const amount = Number(numpadValue.value)
-  if (!numpadValue.value || isNaN(amount) || changeAmount.value < 0) return
+  const isQris = paymentMethod.value === 'qris'
+  const amount = isQris ? cartStore.total : Number(numpadValue.value)
+  if (!isQris && (!numpadValue.value || isNaN(amount) || changeAmount.value < 0)) return
 
   try {
-    const res = await cartStore.checkout(amount) as any
+    const res = await cartStore.checkout(amount, paymentMethod.value) as any
     isCheckoutOpen.value = false
     searchQuery.value = ''
     selectedUmkmFilter.value = 'all'
@@ -156,12 +160,17 @@ const handleCheckoutSubmit = async () => {
       // offline handled inside store
     } else {
       successChange.value = res.kembalian
+      lastPaymentMethod.value = paymentMethod.value
+      const successMsg = isQris
+        ? 'Transaksi QRIS berhasil diselesaikan'
+        : `Transaksi berhasil! Kembalian: ${useCurrencyFormat(res.kembalian)}`
       addToast({
         type: 'success',
-        message: `Transaksi berhasil! Kembalian: ${useCurrencyFormat(res.kembalian)}`
+        message: successMsg
       })
       successTimer.value = setTimeout(() => {
         successChange.value = null
+        lastPaymentMethod.value = 'cash'
       }, 3000)
     }
 
@@ -504,76 +513,121 @@ const numpadKeys = [
               <div class="w-8"></div>
             </div>
 
+            <!-- Payment Method Tabs -->
+            <div class="pos-payment-tabs">
+              <button
+                @click="paymentMethod = 'cash'"
+                class="pos-payment-tab"
+                :class="{ 'pos-payment-tab--active': paymentMethod === 'cash' }"
+              >
+                <Icon name="heroicons:banknotes" class="w-4 h-4" />
+                <span>Tunai / Cash</span>
+              </button>
+              <button
+                @click="paymentMethod = 'qris'"
+                class="pos-payment-tab"
+                :class="{ 'pos-payment-tab--active': paymentMethod === 'qris' }"
+              >
+                <Icon name="heroicons:qr-code" class="w-4 h-4" />
+                <span>QRIS Statis</span>
+              </button>
+            </div>
+
             <!-- Total display -->
             <div class="pos-checkout-total-card">
               <p class="pos-checkout-total-label">Total Tagihan</p>
               <p class="pos-checkout-total-amount">{{ useCurrencyFormat(cartStore.total) }}</p>
             </div>
 
-            <!-- Cash received display -->
-            <div class="pos-checkout-input-display">
-              <span class="pos-checkout-input-label">Uang Diterima</span>
-              <span class="pos-checkout-input-value" :class="{ 'pos-checkout-input-value--filled': numpadValue }">
-                {{ numpadValue ? useCurrencyFormat(Number(numpadValue)) : 'Rp 0' }}
-              </span>
-            </div>
-
-            <!-- Quick amount presets -->
-            <div class="pos-quick-amounts">
-              <button
-                v-for="amt in quickAmounts"
-                :key="amt"
-                @click="numpadValue = String(amt)"
-                class="pos-quick-btn"
-                :class="{ 'pos-quick-btn--active': numpadValue === String(amt) }"
-              >
-                {{ useCurrencyFormat(amt) }}
-              </button>
-            </div>
-
-            <!-- Change display -->
-            <Transition name="fade">
-              <div v-if="numpadValue" class="pos-change-display" :class="isChangeOk ? 'pos-change-display--ok' : 'pos-change-display--err'">
-                <template v-if="isChangeOk">
-                  <Icon name="heroicons:check-circle-solid" class="w-5 h-5" />
-                  <span>Kembalian: <strong>{{ useCurrencyFormat(changeAmount) }}</strong></span>
-                </template>
-                <template v-else>
-                  <Icon name="heroicons:x-circle-solid" class="w-5 h-5" />
-                  <span>Kurang: <strong>{{ useCurrencyFormat(Math.abs(changeAmount)) }}</strong></span>
-                </template>
+            <!-- CASH PAYMENT FLOW -->
+            <div v-if="paymentMethod === 'cash'" class="flex flex-col gap-3 w-full">
+              <!-- Cash received display -->
+              <div class="pos-checkout-input-display">
+                <span class="pos-checkout-input-label">Uang Diterima</span>
+                <span class="pos-checkout-input-value" :class="{ 'pos-checkout-input-value--filled': numpadValue }">
+                  {{ numpadValue ? useCurrencyFormat(Number(numpadValue)) : 'Rp 0' }}
+                </span>
               </div>
-            </Transition>
 
-            <!-- Numpad -->
-            <div class="pos-numpad">
-              <div v-for="(row, ri) in numpadKeys" :key="ri" class="pos-numpad-row">
+              <!-- Quick amount presets -->
+              <div class="pos-quick-amounts">
                 <button
-                  v-for="key in row"
-                  :key="key"
-                  @click="numpadPress(key)"
-                  class="pos-numpad-key"
-                  :class="{
-                    'pos-numpad-key--action': key === 'del' || key === 'clear',
-                    'pos-numpad-key--del': key === 'del',
-                  }"
+                  v-for="amt in quickAmounts"
+                  :key="amt"
+                  @click="numpadValue = String(amt)"
+                  class="pos-quick-btn"
+                  :class="{ 'pos-quick-btn--active': numpadValue === String(amt) }"
                 >
-                  <template v-if="key === 'del'">
-                    <Icon name="heroicons:backspace" class="w-6 h-6" />
-                  </template>
-                  <template v-else-if="key === 'clear'">
-                    <span class="text-xs font-bold">CLR</span>
-                  </template>
-                  <template v-else>{{ key }}</template>
+                  {{ useCurrencyFormat(amt) }}
                 </button>
+              </div>
+
+              <!-- Change display -->
+              <Transition name="fade">
+                <div v-if="numpadValue" class="pos-change-display" :class="isChangeOk ? 'pos-change-display--ok' : 'pos-change-display--err'">
+                  <template v-if="isChangeOk">
+                    <Icon name="heroicons:check-circle-solid" class="w-5 h-5" />
+                    <span>Kembalian: <strong>{{ useCurrencyFormat(changeAmount) }}</strong></span>
+                  </template>
+                  <template v-else>
+                    <Icon name="heroicons:x-circle-solid" class="w-5 h-5" />
+                    <span>Kurang: <strong>{{ useCurrencyFormat(Math.abs(changeAmount)) }}</strong></span>
+                  </template>
+                </div>
+              </Transition>
+
+              <!-- Numpad -->
+              <div class="pos-numpad">
+                <div v-for="(row, ri) in numpadKeys" :key="ri" class="pos-numpad-row">
+                  <button
+                    v-for="key in row"
+                    :key="key"
+                    @click="numpadPress(key)"
+                    class="pos-numpad-key"
+                    :class="{
+                      'pos-numpad-key--action': key === 'del' || key === 'clear',
+                      'pos-numpad-key--del': key === 'del',
+                    }"
+                  >
+                    <template v-if="key === 'del'">
+                      <Icon name="heroicons:backspace" class="w-6 h-6" />
+                    </template>
+                    <template v-else-if="key === 'clear'">
+                      <span class="text-xs font-bold">CLR</span>
+                    </template>
+                    <template v-else>{{ key }}</template>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- QRIS PAYMENT FLOW -->
+            <div v-else class="flex flex-col items-center gap-3 w-full py-1">
+              <div class="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex flex-col items-center gap-3 w-full">
+                <img
+                  src="/qris.jpg"
+                  alt="QRIS Statis"
+                  class="w-44 h-44 object-contain rounded-xl shadow-sm border border-slate-100"
+                />
+                <div class="text-center">
+                  <span class="text-[9px] text-slate-400 font-bold tracking-wider uppercase block">NAMA MERCHANT</span>
+                  <span class="text-xs font-extrabold text-slate-800 block">TOKO VENTURA</span>
+                </div>
+              </div>
+              <div class="bg-amber-50 border border-amber-100 text-amber-900 text-xs px-3.5 py-3 rounded-xl flex items-start gap-2.5 leading-relaxed font-semibold">
+                <Icon name="heroicons:information-circle-solid" class="w-5 h-5 flex-shrink-0 text-amber-600 mt-0.5" />
+                <span>
+                  Pelanggan men-scan QRIS dan memasukkan nominal manual sebesar <strong class="text-amber-950 font-black">{{ useCurrencyFormat(cartStore.total) }}</strong>. Tekan tombol di bawah setelah bukti transfer divalidasi.
+                </span>
               </div>
             </div>
 
             <!-- Submit -->
             <button
               @click="handleCheckoutSubmit"
-              :disabled="!numpadValue || !isChangeOk || cartStore.isCheckingOut"
+              :disabled="cartStore.isCheckingOut || (paymentMethod === 'cash' && (!numpadValue || !isChangeOk))"
               class="pos-checkout-submit"
+              :class="{ 'pos-checkout-submit--qris': paymentMethod === 'qris' }"
             >
               <template v-if="cartStore.isCheckingOut">
                 <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
@@ -583,8 +637,8 @@ const numpadKeys = [
                 Memproses...
               </template>
               <template v-else>
-                <Icon name="heroicons:check" class="w-5 h-5" />
-                Selesaikan Transaksi
+                <Icon :name="paymentMethod === 'qris' ? 'heroicons:check-badge' : 'heroicons:check'" class="w-5 h-5" />
+                {{ paymentMethod === 'qris' ? 'Konfirmasi Lunas ✓' : 'Selesaikan Transaksi' }}
               </template>
             </button>
           </div>
@@ -598,9 +652,13 @@ const numpadKeys = [
         <div class="pos-success-card">
           <div class="pos-success-icon">✓</div>
           <h3 class="pos-success-title">Transaksi Berhasil!</h3>
-          <div class="pos-success-change-box">
+          <div v-if="lastPaymentMethod === 'cash'" class="pos-success-change-box">
             <p class="pos-success-change-label">Kembalian</p>
             <p class="pos-success-change-val">{{ useCurrencyFormat(successChange) }}</p>
+          </div>
+          <div v-else class="pos-success-change-box !bg-emerald-50 !border-emerald-200">
+            <p class="pos-success-change-label !text-emerald-700">Metode Pembayaran</p>
+            <p class="pos-success-change-val !text-emerald-800">QRIS Statis Lunas</p>
           </div>
         </div>
       </div>
@@ -1889,4 +1947,46 @@ const numpadKeys = [
 .cart-item-leave-active { transition: all 0.15s ease-in; }
 .cart-item-enter-from { opacity: 0; transform: translateX(-12px); }
 .cart-item-leave-to { opacity: 0; height: 0; }
+
+/* Payment Tabs Styling */
+.pos-payment-tabs {
+  display: flex;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 14px;
+  gap: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.pos-payment-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #64748b;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.pos-payment-tab--active {
+  background: white;
+  color: #1e3a5f;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.pos-checkout-submit--qris {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  box-shadow: 0 4px 14px rgba(16,185,129,0.3) !important;
+}
+
+.pos-checkout-submit--qris:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+}
 </style>

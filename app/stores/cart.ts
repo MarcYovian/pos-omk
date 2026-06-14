@@ -87,6 +87,7 @@ export const useCartStore = defineStore('cart', () => {
     cashierId: string
     nominalDiterima: number
     cartItems: CartItem[]
+    metodePembayaran?: 'cash' | 'qris'
   }) => {
     const supabase = useSupabase()
     const { data, error } = await supabase.rpc('complete_transaction', {
@@ -97,8 +98,9 @@ export const useCartStore = defineStore('cart', () => {
         product_id: item.product_id,
         qty:        item.qty,
         harga_jual: item.harga_jual
-      }))
-    })
+      })),
+      p_metode_pembayaran: payload.metodePembayaran || 'cash'
+    } as any)
 
     if (error) {
       throw new Error(error.message)
@@ -106,7 +108,7 @@ export const useCartStore = defineStore('cart', () => {
     return data
   }
 
-  const checkout = async (nominalDiterima: number) => {
+  const checkout = async (nominalDiterima: number, paymentMethod: 'cash' | 'qris' = 'cash') => {
     const sessionStore = useSessionStore()
     const authStore = useAuthStore()
     const { isOnline } = useNetworkStatus()
@@ -138,7 +140,8 @@ export const useCartStore = defineStore('cart', () => {
           session_id: sessionStore.sessionId,
           cashier_id: cashierId,
           nominal_diterima: nominalDiterima,
-          cart_items: [...items.value]
+          cart_items: [...items.value],
+          metode_pembayaran: paymentMethod
         })
         addToast({
           type: 'warning',
@@ -152,7 +155,8 @@ export const useCartStore = defineStore('cart', () => {
           sessionId: sessionStore.sessionId,
           cashierId: cashierId,
           nominalDiterima: nominalDiterima,
-          cartItems: items.value
+          cartItems: items.value,
+          metodePembayaran: paymentMethod
         })
         clearCart()
         return res
