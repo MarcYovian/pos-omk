@@ -23,6 +23,7 @@ interface UserRecord {
   is_active: boolean
   created_at: string
   last_sign_in_at: string | null
+  email_confirmed_at: string | null
 }
 
 // State
@@ -278,6 +279,12 @@ const handleToggleActive = async (user: UserRecord) => {
                 :class="u.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-50 text-slate-500 border border-slate-100'"
               >
                 {{ u.is_active ? 'Aktif' : 'Nonaktif' }}
+              </span>
+              <span
+                class="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                :class="u.email_confirmed_at ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-amber-50 text-amber-700 border border-amber-100'"
+              >
+                {{ u.email_confirmed_at ? 'Terverifikasi' : 'Belum Verifikasi' }}
               </span>
             </div>
           </div>
