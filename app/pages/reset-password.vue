@@ -1,6 +1,7 @@
 <!-- pages/reset-password.vue -->
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useToast } from '~/composables/useToast'
 import AppButton from '~/components/ui/AppButton.vue'
 import AppInput from '~/components/ui/AppInput.vue'
@@ -10,12 +11,27 @@ definePageMeta({
   middleware: [] // Public page to allow landing with recovery tokens
 })
 
+const route = useRoute()
 const { addToast } = useToast()
 const supabase = useSupabase()
 
 const newPassword = ref('')
 const confirmPassword = ref('')
 const isSubmitting = ref(false)
+
+onMounted(async () => {
+  const code = route.query.code as string
+  if (code) {
+    try {
+      const { error } = await supabase.auth.exchangeCodeForSession(code)
+      if (error) {
+        addToast({ type: 'danger', message: 'Sesi reset sandi tidak valid atau telah kedaluwarsa.' })
+      }
+    } catch (e) {
+      console.error('Gagal menukarkan kode sesi:', e)
+    }
+  }
+})
 
 const handleResetSubmit = async () => {
   if (!newPassword.value || !confirmPassword.value) {

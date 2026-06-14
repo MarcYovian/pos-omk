@@ -35,15 +35,22 @@ const handleLogin = async () => {
   try {
     await authStore.login(email.value, password.value)
     
+    // Tunggu hingga status reactive user.value terisi untuk menghindari race condition pada route middleware
+    let attempts = 0
+    while (!user.value && attempts < 20) {
+      await new Promise(resolve => setTimeout(resolve, 50))
+      attempts++
+    }
+    
     addToast({
       type: 'success',
       message: 'Login berhasil!'
     })
 
     if (authStore.role === 'admin') {
-      navigateTo('/admin')
+      await navigateTo('/admin')
     } else {
-      navigateTo('/pos')
+      await navigateTo('/pos')
     }
   } catch (error: any) {
     errorMessage.value = 'Email atau password salah'

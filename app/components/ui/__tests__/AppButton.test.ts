@@ -30,8 +30,8 @@ describe('AppButton', () => {
   it('renders with size classes', () => {
     const sizes = [
       { size: 'sm', cls: 'px-3' },
-      { size: 'md', cls: 'px-4' },
-      { size: 'lg', cls: 'px-6' },
+      { size: 'md', cls: 'px-3.5' },
+      { size: 'lg', cls: 'px-5' },
     ] as const
 
     for (const { size, cls } of sizes) {

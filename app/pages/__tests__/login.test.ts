@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { shallowMount } from '@vue/test-utils'
+import { ref } from 'vue'
 
 const mockLogin = vi.fn()
 const mockAddToast = vi.fn()
@@ -10,7 +11,8 @@ vi.mock('~/composables/useToast', () => ({
   useToast: () => ({ addToast: mockAddToast, toasts: { value: [] }, removeToast: vi.fn() }),
 }))
 
-vi.stubGlobal('useSupabaseUser', () => ({ value: null }))
+const mockUser = ref<any>(null)
+vi.stubGlobal('useSupabaseUser', () => mockUser)
 vi.stubGlobal('navigateTo', mockNavigateTo)
 vi.stubGlobal('definePageMeta', vi.fn())
 vi.stubGlobal('useSupabase', () => ({
@@ -21,6 +23,7 @@ describe('login page', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    mockUser.value = null
   })
 
   it('renders login form with title', async () => {
@@ -63,7 +66,10 @@ describe('login page', () => {
   })
 
   it('redirects to /admin on successful admin login', async () => {
-    mockLogin.mockResolvedValue({})
+    mockLogin.mockImplementation(async () => {
+      mockUser.value = { id: 'admin-id', user_metadata: { role: 'admin' } }
+      return {}
+    })
 
     const { useAuthStore } = await import('~/stores/auth')
     const store = useAuthStore()
@@ -81,7 +87,10 @@ describe('login page', () => {
   })
 
   it('redirects to /pos on successful cashier login', async () => {
-    mockLogin.mockResolvedValue({})
+    mockLogin.mockImplementation(async () => {
+      mockUser.value = { id: 'cashier-id', user_metadata: { role: 'cashier' } }
+      return {}
+    })
 
     const { useAuthStore } = await import('~/stores/auth')
     const store = useAuthStore()
