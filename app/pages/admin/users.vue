@@ -251,71 +251,82 @@ const handleToggleActive = async (user: UserRecord) => {
           :key="u.id"
           class="bg-white border border-slate-150 rounded-2xl p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between gap-4"
         >
-          <div class="flex items-start justify-between gap-2">
-            <div class="flex flex-col gap-1 w-2/3">
-              <h3 class="font-bold text-slate-800 text-sm leading-snug break-all">{{ u.email }}</h3>
-              <p class="text-[10px] text-slate-400 font-semibold font-mono">ID: {{ u.id }}</p>
-              
-              <div class="flex gap-2 mt-2">
-                <span
-                  class="text-[10px] font-bold px-2 py-0.5 rounded-full capitalize"
-                  :class="u.role === 'admin' ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-green-50 text-green-700 border border-green-100'"
-                >
-                  {{ u.role }}
-                </span>
-                <span
-                  class="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                  :class="u.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-50 text-slate-500 border border-slate-100'"
-                >
-                  {{ u.is_active ? 'Aktif' : 'Nonaktif' }}
-                </span>
-                <span v-if="u.id === authStore.user?.id" class="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 font-bold px-2 py-0.5 rounded-full">
-                  Anda
-                </span>
-              </div>
+          <div class="flex flex-col gap-2">
+            <!-- Email & Anda Badge -->
+            <div class="flex items-start justify-between gap-2">
+              <h3 class="font-extrabold text-slate-800 text-sm leading-snug break-all flex-grow">
+                {{ u.email }}
+              </h3>
+              <span v-if="u.id === authStore.user?.id" class="text-[9px] bg-brand-50 text-brand-900 border border-brand-100 font-extrabold px-2 py-0.5 rounded-full shrink-0">
+                Anda
+              </span>
             </div>
 
-            <div class="flex gap-1">
+            <!-- User ID -->
+            <p class="text-[10px] text-slate-400 font-semibold font-mono break-all">ID: {{ u.id }}</p>
+            
+            <!-- Badges -->
+            <div class="flex flex-wrap gap-2 mt-1">
+              <span
+                class="text-[10px] font-bold px-2 py-0.5 rounded-full capitalize"
+                :class="u.role === 'admin' ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-green-50 text-green-700 border border-green-100'"
+              >
+                {{ u.role }}
+              </span>
+              <span
+                class="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                :class="u.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-50 text-slate-500 border border-slate-100'"
+              >
+                {{ u.is_active ? 'Aktif' : 'Nonaktif' }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Actions & Timestamps Row -->
+          <div class="border-t border-slate-100 pt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <!-- Timestamps -->
+            <div class="flex justify-between sm:flex-col sm:gap-0.5 text-[10px] text-slate-400 font-semibold font-mono">
+              <span>Dibuat: {{ new Date(u.created_at).toLocaleDateString('id-ID') }}</span>
+              <span v-if="u.last_sign_in_at">Masuk: {{ new Date(u.last_sign_in_at).toLocaleDateString('id-ID') }}</span>
+              <span v-else class="text-slate-300 font-normal">Belum masuk</span>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="flex items-center justify-end gap-1.5 border-t border-slate-50 pt-2.5 sm:border-t-0 sm:pt-0">
               <!-- Toggle active/inactive status (for marcellinusyovian@gmail.com only) -->
               <button
                 v-if="authStore.user?.email === 'marcellinusyovian@gmail.com' && u.email !== 'marcellinusyovian@gmail.com'"
                 @click="handleToggleActive(u)"
                 :disabled="isTogglingActive[u.id]"
-                class="p-1.5 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center disabled:opacity-50"
+                class="p-1.5 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center disabled:opacity-50 border border-slate-150 bg-slate-50"
                 :class="u.is_active ? 'text-slate-400 hover:text-danger hover:bg-red-50' : 'text-slate-400 hover:text-emerald-600 hover:bg-green-50'"
                 :title="u.is_active ? 'Nonaktifkan Pengguna' : 'Aktifkan Pengguna'"
               >
-                <Icon :name="u.is_active ? 'heroicons:no-symbol' : 'heroicons:check-circle'" class="w-5 h-5" />
+                <Icon :name="u.is_active ? 'heroicons:no-symbol' : 'heroicons:check-circle'" class="w-4.5 h-4.5" />
               </button>
               <button
                 @click="handleSendResetEmail(u.email)"
-                class="p-1.5 text-slate-400 hover:text-warning hover:bg-amber-50 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
+                class="p-1.5 text-slate-400 hover:text-warning hover:bg-amber-50 border border-slate-150 bg-slate-50 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
                 title="Kirim Link Reset Sandi"
               >
-                <Icon name="heroicons:key" class="w-5 h-5" />
+                <Icon name="heroicons:key" class="w-4.5 h-4.5" />
               </button>
               <button
                 @click="handleOpenEdit(u)"
-                class="p-1.5 text-slate-400 hover:text-brand-900 hover:bg-slate-100 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
+                class="p-1.5 text-slate-400 hover:text-brand-900 hover:bg-slate-100 border border-slate-150 bg-slate-50 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
                 title="Edit Pengguna"
               >
-                <Icon name="heroicons:pencil-square" class="w-5 h-5" />
+                <Icon name="heroicons:pencil-square" class="w-4.5 h-4.5" />
               </button>
               <button
                 @click="handleOpenDelete(u)"
                 v-if="u.id !== authStore.user?.id"
-                class="p-1.5 text-slate-400 hover:text-danger hover:bg-red-50 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
+                class="p-1.5 text-slate-400 hover:text-danger hover:bg-red-50 border border-slate-150 bg-slate-50 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
                 title="Hapus Pengguna"
               >
-                <Icon name="heroicons:trash" class="w-5 h-5" />
+                <Icon name="heroicons:trash" class="w-4.5 h-4.5" />
               </button>
             </div>
-          </div>
-
-          <div class="border-t border-slate-100 pt-3 flex justify-between text-[11px] text-slate-400 font-semibold">
-            <span>Dibuat: {{ new Date(u.created_at).toLocaleDateString('id-ID') }}</span>
-            <span v-if="u.last_sign_in_at">Masuk: {{ new Date(u.last_sign_in_at).toLocaleDateString('id-ID') }}</span>
-            <span v-else class="text-slate-300">Belum pernah masuk</span>
           </div>
         </div>
       </div>
