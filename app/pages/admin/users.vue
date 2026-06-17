@@ -1,4 +1,3 @@
-<!-- pages/admin/users.vue -->
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useAuthStore } from '~/stores/auth'
@@ -7,6 +6,7 @@ import AppButton from '~/components/ui/AppButton.vue'
 import AppInput from '~/components/ui/AppInput.vue'
 import AppModal from '~/components/ui/AppModal.vue'
 import AppToast from '~/components/ui/AppToast.vue'
+import ProfileDropdown from '~/components/ui/ProfileDropdown.vue'
 
 definePageMeta({
   middleware: ['auth', 'admin']
@@ -14,17 +14,6 @@ definePageMeta({
 
 const authStore = useAuthStore()
 const { addToast } = useToast()
-const supabase = useSupabase()
-
-interface UserRecord {
-  id: string
-  email: string
-  role: 'admin' | 'cashier'
-  is_active: boolean
-  created_at: string
-  last_sign_in_at: string | null
-  email_confirmed_at: string | null
-}
 
 // State
 const users = ref<UserRecord[]>([])
@@ -33,9 +22,11 @@ const isLoading = ref(false)
 // Modals
 const isCreateOpen = ref(false)
 const createEmail = ref('')
-const createPassword = ref('')
 const createRole = ref<'admin' | 'cashier'>('cashier')
 const isCreating = ref(false)
+
+const createdPassword = ref('')
+const isPasswordModalOpen = ref(false)
 
 const isEditOpen = ref(false)
 const editingUser = ref<UserRecord | null>(null)
@@ -52,9 +43,8 @@ const isDeleting = ref(false)
 const fetchUsers = async () => {
   isLoading.value = true
   try {
-    const { data, error } = await (supabase.rpc as any)('get_all_users')
-    if (error) throw error
-    users.value = (data as any) || []
+    const data = await $fetch<UserRecord[]>('/api/users')
+    users.value = data
   } catch (e: any) {
     addToast({ type: 'danger', message: e.message || 'Gagal memuat daftar pengguna' })
   } finally {
@@ -66,10 +56,18 @@ onMounted(() => {
   fetchUsers()
 })
 
+const copyPassword = async () => {
+  try {
+    await navigator.clipboard.writeText(createdPassword.value)
+    addToast({ type: 'success', message: 'Password berhasil disalin!' })
+  } catch {
+    addToast({ type: 'warning', message: 'Gagal menyalin password. Silakan salin manual.' })
+  }
+}
+
 // Handlers
 const handleOpenCreate = () => {
   createEmail.value = ''
-  createPassword.value = ''
   createRole.value = 'cashier'
   isCreateOpen.value = true
 }
@@ -81,30 +79,17 @@ const handleCreateSubmit = async () => {
   }
   isCreating.value = true
   try {
-    // Generate a random temporary password (the user will reset it via email link anyway)
-    const tempPassword = crypto.randomUUID()
-
-    const { error } = await (supabase.rpc as any)('admin_create_user', {
-      p_email: createEmail.value.trim(),
-      p_password: tempPassword,
-      p_role: createRole.value
-    })
-    if (error) throw error
-
-    // Send reset password email to the new user
-    const redirectUrl = `${window.location.origin}/reset-password`
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(createEmail.value.trim(), {
-      redirectTo: redirectUrl
+    const result = await $fetch<CreateUserResponse>('/api/users', {
+      method: 'POST',
+      body: {
+        email: createEmail.value.trim(),
+        role: createRole.value,
+      },
     })
 
-    if (resetError) {
-      console.warn('Gagal mengirim email reset password:', resetError.message)
-      addToast({ type: 'warning', message: 'User dibuat, tetapi gagal mengirim email link setel ulang sandi.' })
-    } else {
-      addToast({ type: 'success', message: 'Pengguna berhasil dibuat & email setel ulang sandi dikirim!' })
-    }
-
+    createdPassword.value = result.password
     isCreateOpen.value = false
+    isPasswordModalOpen.value = true
     await fetchUsers()
   } catch (e: any) {
     addToast({ type: 'danger', message: e.message || 'Gagal membuat pengguna' })
@@ -128,13 +113,14 @@ const handleEditSubmit = async () => {
   }
   isUpdating.value = true
   try {
-    const { error } = await (supabase.rpc as any)('admin_update_user', {
-      p_user_id: editingUser.value.id,
-      p_email: editEmail.value.trim(),
-      p_password: editPassword.value || null,
-      p_role: editRole.value
+    await $fetch(`/api/users/${editingUser.value.id}`, {
+      method: 'PATCH',
+      body: {
+        email: editEmail.value.trim(),
+        password: editPassword.value || undefined,
+        role: editRole.value,
+      },
     })
-    if (error) throw error
     addToast({ type: 'success', message: 'Detail pengguna berhasil diperbarui' })
     isEditOpen.value = false
     await fetchUsers()
@@ -158,10 +144,9 @@ const handleDeleteSubmit = async () => {
   if (!deletingUser.value) return
   isDeleting.value = true
   try {
-    const { error } = await (supabase.rpc as any)('admin_delete_user', {
-      p_user_id: deletingUser.value.id
+    await $fetch(`/api/users/${deletingUser.value.id}`, {
+      method: 'DELETE',
     })
-    if (error) throw error
     addToast({ type: 'success', message: 'Pengguna berhasil dihapus' })
     isDeleteOpen.value = false
     await fetchUsers()
@@ -172,14 +157,12 @@ const handleDeleteSubmit = async () => {
   }
 }
 
-const handleSendResetEmail = async (email: string) => {
+const handleSendResetEmail = async (id: string) => {
   try {
-    const redirectUrl = `${window.location.origin}/reset-password`
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: redirectUrl
+    const result = await $fetch<{ email: string }>(`/api/users/${id}/send-reset`, {
+      method: 'POST',
     })
-    if (error) throw error
-    addToast({ type: 'success', message: `Email link reset sandi terkirim ke ${email}!` })
+    addToast({ type: 'success', message: `Email link reset sandi terkirim ke ${result.email}!` })
   } catch (e: any) {
     addToast({ type: 'danger', message: e.message || 'Gagal mengirim email reset sandi' })
   }
@@ -191,20 +174,19 @@ const handleToggleActive = async (user: UserRecord) => {
   if (user.email === 'marcellinusyovian@gmail.com') return
   isTogglingActive.value[user.id] = true
   try {
-    const { error } = await supabase.rpc('admin_toggle_user_active', {
-      p_user_id: user.id,
-      p_is_active: !user.is_active
+    await $fetch(`/api/users/${user.id}/toggle-active`, {
+      method: 'PATCH',
+      body: { is_active: !user.is_active },
     })
-    if (error) throw error
     addToast({
       type: 'success',
-      message: `Status pengguna ${user.email} berhasil diubah`
+      message: `Status pengguna ${user.email} berhasil diubah`,
     })
     await fetchUsers()
   } catch (e: any) {
     addToast({
       type: 'danger',
-      message: e.message || 'Gagal mengubah status aktif pengguna'
+      message: e.message || 'Gagal mengubah status aktif pengguna',
     })
   } finally {
     isTogglingActive.value[user.id] = false
@@ -225,14 +207,17 @@ const handleToggleActive = async (user: UserRecord) => {
           <p class="text-[10px] text-brand-200 mt-1 font-medium font-mono">Layanan Pengelola</p>
         </div>
       </div>
-      <AppButton
-        @click="handleOpenCreate"
-        size="sm"
-        variant="secondary"
-        class="!bg-white !text-brand-900 hover:!bg-slate-100 border-0 text-xs font-bold shadow-sm"
-      >
-        Tambah User
-      </AppButton>
+      <div class="flex items-center gap-2">
+        <AppButton
+          @click="handleOpenCreate"
+          size="sm"
+          variant="secondary"
+          class="!bg-white !text-brand-900 hover:!bg-slate-100 border-0 text-xs font-bold shadow-sm"
+        >
+          Tambah User
+        </AppButton>
+        <ProfileDropdown variant="dark" />
+      </div>
     </header>
 
     <!-- Content -->
@@ -312,7 +297,7 @@ const handleToggleActive = async (user: UserRecord) => {
                 <Icon :name="u.is_active ? 'heroicons:no-symbol' : 'heroicons:check-circle'" class="w-4.5 h-4.5" />
               </button>
               <button
-                @click="handleSendResetEmail(u.email)"
+                @click="handleSendResetEmail(u.id)"
                 class="p-1.5 text-slate-400 hover:text-warning hover:bg-amber-50 border border-slate-150 bg-slate-50 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
                 title="Kirim Link Reset Sandi"
               >
@@ -368,6 +353,42 @@ const handleToggleActive = async (user: UserRecord) => {
       <template #footer>
         <AppButton variant="secondary" @click="isCreateOpen = false">Batal</AppButton>
         <AppButton :loading="isCreating" @click="handleCreateSubmit">Simpan</AppButton>
+      </template>
+    </AppModal>
+
+    <!-- Password Created Modal -->
+    <AppModal v-model="isPasswordModalOpen" title="Pengguna Berhasil Dibuat">
+      <div class="py-2 flex flex-col gap-4">
+        <div class="bg-emerald-50 border border-emerald-100 rounded-xl p-4 flex items-center gap-3">
+          <Icon name="heroicons:check-circle" class="w-6 h-6 text-emerald-600 shrink-0" />
+          <p class="text-sm font-semibold text-emerald-800">Akun pengguna berhasil dibuat!</p>
+        </div>
+
+        <div class="bg-slate-50 border border-slate-150 rounded-xl p-4 flex flex-col gap-2">
+          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Email</p>
+          <p class="text-sm font-bold text-slate-800 break-all">{{ createEmail }}</p>
+        </div>
+
+        <div class="bg-amber-50 border border-amber-100 rounded-xl p-4 flex flex-col gap-2">
+          <p class="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Password Sementara</p>
+          <p class="text-base font-mono font-black text-amber-900 tracking-wider select-all break-all">{{ createdPassword }}</p>
+          <button
+            @click="copyPassword"
+            class="mt-2 text-xs font-bold text-amber-700 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 self-start"
+          >
+            <Icon name="heroicons:clipboard" class="w-3.5 h-3.5" />
+            Salin Password
+          </button>
+        </div>
+
+        <div class="bg-blue-50 border border-blue-100 rounded-xl p-3">
+          <p class="text-[11px] font-semibold text-blue-700">
+            Bagikan password ini ke pengguna. Setelah login, mereka akan diminta mengganti password.
+          </p>
+        </div>
+      </div>
+      <template #footer>
+        <AppButton @click="isPasswordModalOpen = false">Tutup</AppButton>
       </template>
     </AppModal>
 

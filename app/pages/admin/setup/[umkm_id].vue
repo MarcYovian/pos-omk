@@ -215,6 +215,9 @@ const handleDelete = async (productId: string) => {
           </p>
         </div>
       </div>
+      <div class="flex items-center gap-2">
+        <ProfileDropdown variant="dark" />
+      </div>
     </header>
 
     <!-- Content -->

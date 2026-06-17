@@ -127,6 +127,9 @@ onUnmounted(() => {
           <p class="text-[10px] text-brand-200 mt-1 font-medium font-mono">Layanan Pengelola</p>
         </div>
       </div>
+      <div class="flex items-center gap-2">
+        <ProfileDropdown variant="dark" />
+      </div>
     </header>
 
     <!-- Content -->

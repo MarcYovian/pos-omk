@@ -8,6 +8,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './app'),
       '~': path.resolve(__dirname, './app'),
+      '#supabase/server': path.resolve(__dirname, './test/mocks/supabase-server.ts'),
     }
   },
   test: {

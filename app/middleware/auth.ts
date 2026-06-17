@@ -16,4 +16,9 @@ export default defineNuxtRouteMiddleware((to, from) => {
     authStore.logout()
     return navigateTo('/login')
   }
+
+  // Redirect to change-password if force_password_change flag is set
+  if (authStore.needsPasswordChange && to.path !== '/change-password') {
+    return navigateTo('/change-password')
+  }
 })

@@ -203,6 +203,7 @@ const handleConfirmClose = async () => {
         >
           Tutup Sesi
         </AppButton>
+        <ProfileDropdown variant="dark" />
       </div>
     </header>
 

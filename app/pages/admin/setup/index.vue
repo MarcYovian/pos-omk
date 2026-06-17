@@ -149,15 +149,18 @@ const handleEditUmkmSubmit = async () => {
           <p class="text-[10px] text-brand-200 mt-1 font-medium font-mono">Layanan Pengelola</p>
         </div>
       </div>
-      <AppButton
-        @click="handleOpenAddUmkm"
-        variant="secondary"
-        size="sm"
-        v-if="umkmStore.umkmList.length < 7"
-        class="!bg-white !text-brand-900 hover:!bg-slate-100 border-0 text-xs font-bold shadow-sm animate-none"
-      >
-        Tambah UMKM
-      </AppButton>
+      <div class="flex items-center gap-2">
+        <AppButton
+          @click="handleOpenAddUmkm"
+          variant="secondary"
+          size="sm"
+          v-if="umkmStore.umkmList.length < 7"
+          class="!bg-white !text-brand-900 hover:!bg-slate-100 border-0 text-xs font-bold shadow-sm animate-none"
+        >
+          Tambah UMKM
+        </AppButton>
+        <ProfileDropdown variant="dark" />
+      </div>
     </header>
 
     <!-- Content -->
