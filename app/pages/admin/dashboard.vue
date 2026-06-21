@@ -4,6 +4,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useSessionStore } from '~/stores/session'
 import { useToast } from '~/composables/useToast'
 import AppToast from '~/components/ui/AppToast.vue'
+import ProfileDropdown from '~/components/ui/ProfileDropdown.vue'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
 definePageMeta({

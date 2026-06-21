@@ -11,6 +11,7 @@ import { useToast } from '~/composables/useToast'
 import AppButton from '~/components/ui/AppButton.vue'
 import AppToast from '~/components/ui/AppToast.vue'
 import OfflineBanner from '~/components/ui/OfflineBanner.vue'
+import ProfileDropdown from '~/components/ui/ProfileDropdown.vue'
 
 definePageMeta({
   middleware: ['auth']
