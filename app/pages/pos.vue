@@ -214,13 +214,7 @@ const numpadKeys = [
           <Icon name="heroicons:cog-6-tooth" class="w-4 h-4" />
           <span class="hidden sm:inline">Admin</span>
         </NuxtLink>
-        <button
-          @click="authStore.logout()"
-          class="pos-header-btn"
-        >
-          <Icon name="heroicons:arrow-right-on-rectangle" class="w-4 h-4" />
-          <span class="hidden sm:inline">Keluar</span>
-        </button>
+        <ProfileDropdown variant="dark" />
       </div>
     </header>
 

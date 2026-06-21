@@ -91,13 +91,7 @@ const handleReopenSession = async () => {
           <Icon name="heroicons:shopping-cart" class="w-4 h-4 text-brand-900" />
           <span>Layar Kasir</span>
         </NuxtLink>
-        <button
-          @click="authStore.logout()"
-          class="text-xs bg-danger text-white hover:bg-red-700 font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm"
-        >
-          <Icon name="heroicons:arrow-right-on-rectangle" class="w-4 h-4" />
-          <span>Keluar</span>
-        </button>
+        <ProfileDropdown variant="dark" />
       </div>
     </header>
 
