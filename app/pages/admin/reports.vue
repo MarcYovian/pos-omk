@@ -8,6 +8,7 @@ import { generateUMKMReport, type ProductReport } from '~/utils/report'
 import AppButton from '~/components/ui/AppButton.vue'
 import AppModal from '~/components/ui/AppModal.vue'
 import AppToast from '~/components/ui/AppToast.vue'
+import ProfileDropdown from '~/components/ui/ProfileDropdown.vue'
 
 definePageMeta({
   middleware: ['auth', 'admin']

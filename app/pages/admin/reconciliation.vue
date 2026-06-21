@@ -8,6 +8,7 @@ import AppButton from '~/components/ui/AppButton.vue'
 import AppInput from '~/components/ui/AppInput.vue'
 import AppToast from '~/components/ui/AppToast.vue'
 import AppModal from '~/components/ui/AppModal.vue'
+import ProfileDropdown from '~/components/ui/ProfileDropdown.vue'
 import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({
