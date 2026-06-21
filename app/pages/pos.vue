@@ -161,13 +161,6 @@ const handleCheckoutSubmit = async () => {
     } else {
       successChange.value = res.kembalian
       lastPaymentMethod.value = paymentMethod.value
-      const successMsg = isQris
-        ? 'Transaksi QRIS berhasil diselesaikan'
-        : `Transaksi berhasil! Kembalian: ${useCurrencyFormat(res.kembalian)}`
-      addToast({
-        type: 'success',
-        message: successMsg
-      })
       successTimer.value = setTimeout(() => {
         successChange.value = null
         lastPaymentMethod.value = 'cash'
@@ -181,6 +174,20 @@ const handleCheckoutSubmit = async () => {
       message: e.message || 'Transaksi gagal, silakan coba lagi'
     })
   }
+}
+
+const closeSuccessOverlay = () => {
+  if (successTimer.value) {
+    clearTimeout(successTimer.value)
+    successTimer.value = null
+  }
+  successChange.value = null
+  lastPaymentMethod.value = 'cash'
+}
+
+const getProductCartQty = (productId: string) => {
+  const item = cartStore.items.find(i => i.product_id === productId)
+  return item ? item.qty : 0
 }
 
 const numpadKeys = [
@@ -306,6 +313,7 @@ const numpadKeys = [
               :key="p.id"
               @click="handleAddToCart(p)"
               class="pos-product-card"
+              :class="{ 'pos-product-card--selected': getProductCartQty(p.id) > 0 }"
             >
               <!-- UMKM label -->
               <span class="pos-product-umkm">{{ p.umkm?.nama_umkm || 'UMKM' }}</span>
@@ -315,15 +323,26 @@ const numpadKeys = [
 
               <!-- Stock & Price -->
               <div class="pos-product-footer">
-                <span class="pos-product-stock">
-                  <Icon name="heroicons:cube" class="w-3 h-3" />
-                  {{ p.stok_sekarang }}
-                </span>
-                <span class="pos-product-price">{{ useCurrencyFormat(p.harga_jual) }}</span>
+                <div class="pos-product-footer-info">
+                  <span class="pos-product-stock">
+                    <Icon name="heroicons:cube" class="w-3 h-3" />
+                    {{ p.stok_sekarang }}
+                  </span>
+                  <span class="pos-product-price">{{ useCurrencyFormat(p.harga_jual) }}</span>
+                </div>
               </div>
 
-              <!-- Add indicator -->
-              <div class="pos-product-add-ring">
+              <!-- Add indicator / controls -->
+              <div v-if="getProductCartQty(p.id) > 0" class="pos-card-qty-ctrl">
+                <button @click.stop="cartStore.decrementItem(p.id)" class="pos-card-qty-btn pos-card-qty-btn--minus">
+                  <Icon name="heroicons:minus" class="w-3.5 h-3.5" />
+                </button>
+                <span class="pos-card-qty-val">{{ getProductCartQty(p.id) }}</span>
+                <button @click.stop="handleAddToCart(p)" class="pos-card-qty-btn pos-card-qty-btn--plus">
+                  <Icon name="heroicons:plus" class="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div v-else class="pos-product-add-ring">
                 <Icon name="heroicons:plus" class="w-4 h-4" />
               </div>
             </button>
@@ -556,20 +575,6 @@ const numpadKeys = [
                 </button>
               </div>
 
-              <!-- Change display -->
-              <Transition name="fade">
-                <div v-if="numpadValue" class="pos-change-display" :class="isChangeOk ? 'pos-change-display--ok' : 'pos-change-display--err'">
-                  <template v-if="isChangeOk">
-                    <Icon name="heroicons:check-circle-solid" class="w-5 h-5" />
-                    <span>Kembalian: <strong>{{ useCurrencyFormat(changeAmount) }}</strong></span>
-                  </template>
-                  <template v-else>
-                    <Icon name="heroicons:x-circle-solid" class="w-5 h-5" />
-                    <span>Kurang: <strong>{{ useCurrencyFormat(Math.abs(changeAmount)) }}</strong></span>
-                  </template>
-                </div>
-              </Transition>
-
               <!-- Numpad -->
               <div class="pos-numpad">
                 <div v-for="(row, ri) in numpadKeys" :key="ri" class="pos-numpad-row">
@@ -601,7 +606,7 @@ const numpadKeys = [
                 <img
                   src="/qris.jpg"
                   alt="QRIS Statis"
-                  class="w-44 h-44 object-contain rounded-xl shadow-sm border border-slate-100"
+                  class="w-60 h-60 object-contain rounded-xl shadow-sm border border-slate-100"
                 />
                 <div class="text-center">
                   <span class="text-[9px] text-slate-400 font-bold tracking-wider uppercase block">NAMA MERCHANT</span>
@@ -621,7 +626,10 @@ const numpadKeys = [
               @click="handleCheckoutSubmit"
               :disabled="cartStore.isCheckingOut || (paymentMethod === 'cash' && (!numpadValue || !isChangeOk))"
               class="pos-checkout-submit"
-              :class="{ 'pos-checkout-submit--qris': paymentMethod === 'qris' }"
+              :class="{
+                'pos-checkout-submit--qris': paymentMethod === 'qris',
+                'pos-checkout-submit--err': paymentMethod === 'cash' && numpadValue && !isChangeOk
+              }"
             >
               <template v-if="cartStore.isCheckingOut">
                 <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
@@ -631,8 +639,24 @@ const numpadKeys = [
                 Memproses...
               </template>
               <template v-else>
-                <Icon :name="paymentMethod === 'qris' ? 'heroicons:check-badge' : 'heroicons:check'" class="w-5 h-5" />
-                {{ paymentMethod === 'qris' ? 'Konfirmasi Lunas ✓' : 'Selesaikan Transaksi' }}
+                <template v-if="paymentMethod === 'qris'">
+                  <Icon name="heroicons:check-badge" class="w-5 h-5" />
+                  Konfirmasi Lunas ✓
+                </template>
+                <template v-else-if="paymentMethod === 'cash'">
+                  <template v-if="!numpadValue">
+                    <Icon name="heroicons:credit-card" class="w-5 h-5" />
+                    Masukkan Uang Pembayaran
+                  </template>
+                  <template v-else-if="!isChangeOk">
+                    <Icon name="heroicons:x-circle" class="w-5 h-5" />
+                    Uang Kurang {{ useCurrencyFormat(Math.abs(changeAmount)) }}
+                  </template>
+                  <template v-else>
+                    <Icon name="heroicons:check-circle" class="w-5 h-5" />
+                    Bayar & Kembalikan {{ useCurrencyFormat(changeAmount) }}
+                  </template>
+                </template>
               </template>
             </button>
           </div>
@@ -642,8 +666,13 @@ const numpadKeys = [
 
     <!-- ═══════════════════════ SUCCESS OVERLAY ═══════════════════════ -->
     <Transition name="success-pop">
-      <div v-if="successChange !== null" class="pos-success-overlay">
+      <div v-if="successChange !== null" class="pos-success-overlay" @click.self="closeSuccessOverlay">
         <div class="pos-success-card">
+          <!-- Close button -->
+          <button @click="closeSuccessOverlay" class="pos-success-close" aria-label="Tutup">
+            <Icon name="heroicons:x-mark" class="w-5 h-5" />
+          </button>
+
           <div class="pos-success-icon">✓</div>
           <h3 class="pos-success-title">Transaksi Berhasil!</h3>
           <div v-if="lastPaymentMethod === 'cash'" class="pos-success-change-box">
@@ -1149,6 +1178,83 @@ const numpadKeys = [
 .pos-product-card:hover .pos-product-add-ring {
   opacity: 1;
   transform: scale(1);
+}
+
+.pos-product-card--selected {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+
+@keyframes popIn {
+  0% { transform: scale(0); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.pos-product-card--selected .pos-product-footer {
+  padding-right: 80px;
+  transition: padding-right 0.15s ease;
+}
+
+.pos-product-footer-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+}
+
+.pos-card-qty-ctrl {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: white;
+  border: 1.5px solid #3b82f6;
+  border-radius: 999px;
+  padding: 2px;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+  z-index: 5;
+  animation: popIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.pos-card-qty-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: all 0.1s ease;
+}
+
+.pos-card-qty-btn--minus {
+  background: #f1f5f9;
+  color: #475569;
+}
+.pos-card-qty-btn--minus:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.pos-card-qty-btn--plus {
+  background: #3b82f6;
+  color: white;
+}
+.pos-card-qty-btn--plus:hover {
+  background: #2563eb;
+}
+
+.pos-card-qty-val {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #1e293b;
+  min-width: 16px;
+  text-align: center;
 }
 
 /* ─────────────────────────────────────────────
@@ -1724,26 +1830,7 @@ const numpadKeys = [
   border-color: #0f172a;
 }
 
-.pos-change-display {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border-radius: 12px;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
 
-.pos-change-display--ok {
-  background: #f0fdf4;
-  color: #16a34a;
-  border: 1px solid #bbf7d0;
-}
-.pos-change-display--err {
-  background: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
-}
 
 /* Numpad */
 .pos-numpad {
@@ -1824,6 +1911,10 @@ const numpadKeys = [
   opacity: 0.45;
   cursor: not-allowed;
 }
+.pos-checkout-submit--err {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  opacity: 0.8 !important;
+}
 
 /* ─────────────────────────────────────────────
    SUCCESS OVERLAY
@@ -1841,6 +1932,7 @@ const numpadKeys = [
 }
 
 .pos-success-card {
+  position: relative;
   background: white;
   border-radius: 28px;
   padding: 2.5rem 2rem;
@@ -1853,6 +1945,28 @@ const numpadKeys = [
   gap: 1rem;
   box-shadow: 0 24px 64px rgba(0,0,0,0.25);
   border: 2px solid #bbf7d0;
+}
+
+.pos-success-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+.pos-success-close:hover {
+  background: #e2e8f0;
+  color: #1e293b;
 }
 
 .pos-success-icon {
