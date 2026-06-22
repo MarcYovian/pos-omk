@@ -1,11 +1,22 @@
-import { serverSupabaseServiceRole } from '#supabase/server'
+import { serverSupabaseServiceRole, serverSupabaseUser } from '#supabase/server'
 
 export default defineEventHandler(async (event) => {
-  const admin = await requireAdmin(event)
-  const userId = getRouterParam(event, 'id')
+  const currentUser = await serverSupabaseUser(event)
+  if (!currentUser) {
+    throw createError({ status: 401, statusText: 'Unauthorized' })
+  }
 
+  const userId = getRouterParam(event, 'id')
   if (!userId) {
     throw createError({ status: 400, statusText: 'User ID is required' })
+  }
+
+  const role = currentUser.user_metadata?.role
+  const isAdmin = role === 'admin'
+  const isSelf = currentUser.id === userId
+
+  if (!isAdmin && !isSelf) {
+    throw createError({ status: 403, statusText: 'Forbidden' })
   }
 
   const client = serverSupabaseServiceRole(event)

@@ -54,29 +54,16 @@ const handleSubmit = async () => {
 
     const { error: updateError } = await supabase.auth.updateUser({
       password: newPassword.value,
+      data: { force_password_change: false },
     })
 
     if (updateError) throw updateError
 
-    if (authStore.user?.id) {
-      try {
-        await $fetch(`/api/users/${authStore.user.id}/password-changed`, {
-          method: 'POST',
-        })
-      } catch {
-        // non-critical, proceed anyway
-      }
-    }
-
+    authStore.markPasswordChangeCompleted()
     addToast({ type: 'success', message: 'Kata sandi berhasil diperbarui!' })
 
-    setTimeout(() => {
-      if (authStore.role === 'admin') {
-        navigateTo('/admin')
-      } else {
-        navigateTo('/pos')
-      }
-    }, 1500)
+    const target = authStore.role === 'admin' ? '/admin' : '/pos'
+    navigateTo(target)
   } catch (e: any) {
     addToast({ type: 'danger', message: e.message || 'Gagal memperbarui kata sandi' })
   } finally {

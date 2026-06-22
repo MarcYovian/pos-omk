@@ -157,6 +157,17 @@ const handleDeleteSubmit = async () => {
   }
 }
 
+const handleSendVerification = async (id: string) => {
+  try {
+    const result = await $fetch<{ email: string }>(`/api/users/${id}/send-verification`, {
+      method: 'POST',
+    })
+    addToast({ type: 'success', message: `Email verifikasi terkirim ke ${result.email}!` })
+  } catch (e: any) {
+    addToast({ type: 'danger', message: e.message || 'Gagal mengirim email verifikasi' })
+  }
+}
+
 const handleSendResetEmail = async (id: string) => {
   try {
     const result = await $fetch<{ email: string }>(`/api/users/${id}/send-reset`, {
@@ -295,6 +306,14 @@ const handleToggleActive = async (user: UserRecord) => {
                 :title="u.is_active ? 'Nonaktifkan Pengguna' : 'Aktifkan Pengguna'"
               >
                 <Icon :name="u.is_active ? 'heroicons:no-symbol' : 'heroicons:check-circle'" class="w-4.5 h-4.5" />
+              </button>
+              <button
+                v-if="!u.email_confirmed_at"
+                @click="handleSendVerification(u.id)"
+                class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 border border-slate-150 bg-slate-50 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
+                title="Kirim Email Verifikasi"
+              >
+                <Icon name="heroicons:envelope" class="w-4.5 h-4.5" />
               </button>
               <button
                 @click="handleSendResetEmail(u.id)"

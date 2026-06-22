@@ -14,10 +14,16 @@ export const useAuthStore = defineStore('auth', () => {
   })
   const role = ref<'admin' | 'cashier' | null>(null)
   const isLoading = ref(false)
+  const passwordChangeCompleted = ref(false)
 
   const needsPasswordChange = computed(() => {
+    if (passwordChangeCompleted.value) return false
     return user.value?.user_metadata?.force_password_change === true
   })
+
+  const markPasswordChangeCompleted = () => {
+    passwordChangeCompleted.value = true
+  }
 
   const getRole = (): 'admin' | 'cashier' => {
     const r = user.value?.user_metadata?.role
@@ -68,6 +74,7 @@ export const useAuthStore = defineStore('auth', () => {
     role,
     isLoading,
     needsPasswordChange,
+    markPasswordChangeCompleted,
     getRole,
     login,
     logout,

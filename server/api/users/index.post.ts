@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
   const { data, error } = await client.auth.admin.createUser({
     email: body.email.trim(),
     password,
-    email_confirm: false,
+    email_confirm: true,
     user_metadata: {
       role: body.role,
       is_active: true,

@@ -3,6 +3,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useToast } from '~/composables/useToast'
+import { useAuthStore } from '~/stores/auth'
 import AppButton from '~/components/ui/AppButton.vue'
 import AppInput from '~/components/ui/AppInput.vue'
 import AppToast from '~/components/ui/AppToast.vue'
@@ -10,6 +11,8 @@ import AppToast from '~/components/ui/AppToast.vue'
 definePageMeta({
   middleware: [] // Public page to allow landing with recovery tokens
 })
+
+const authStore = useAuthStore()
 
 const route = useRoute()
 const { addToast } = useToast()
@@ -51,25 +54,21 @@ const handleResetSubmit = async () => {
 
   isSubmitting.value = true
   try {
-    // Update the password of the currently authenticated recovery session user
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword.value
+    const { data, error } = await supabase.auth.updateUser({
+      password: newPassword.value,
+      data: { force_password_change: false },
     })
 
     if (error) throw error
 
-    addToast({ type: 'success', message: 'Kata sandi berhasil diperbarui! Silakan masuk kembali.' })
+    authStore.markPasswordChangeCompleted()
+    addToast({ type: 'success', message: 'Kata sandi berhasil diperbarui!' })
 
-    // Sign out to clear the temporary recovery session
-    await supabase.auth.signOut()
-
-    // Redirect to login page
-    setTimeout(() => {
-      navigateTo('/login')
-    }, 1500)
+    const role = data.user?.user_metadata?.role
+    isSubmitting.value = false
+    navigateTo(role === 'admin' ? '/admin' : '/pos')
   } catch (e: any) {
     addToast({ type: 'danger', message: e.message || 'Gagal memperbarui kata sandi' })
-  } finally {
     isSubmitting.value = false
   }
 }
