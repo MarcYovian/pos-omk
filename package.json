@@ -19,11 +19,13 @@
     "@supabase/supabase-js": "^2.107.0",
     "@vite-pwa/nuxt": "^1.1.1",
     "@vueuse/nuxt": "^14.3.0",
+    "chart.js": "^4.5.1",
     "dotenv": "^17.4.2",
     "idb": "^8.0.1",
     "nuxt": "^4.4.8",
     "pinia": "^3.0.4",
     "vue": "^3.4.31",
+    "vue-chartjs": "^5.3.3",
     "vue-router": "^4.4.0"
   },
   "devDependencies": {
