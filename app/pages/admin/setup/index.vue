@@ -173,7 +173,7 @@ const handleEditUmkmSubmit = async () => {
           @click="handleOpenAddUmkm"
           variant="primary"
           size="sm"
-          v-if="umkmStore.umkmList.length < 7"
+          v-if="!sessionStore.isClosed"
           class="font-bold text-xs shadow-sm shrink-0"
         >
           Tambah UMKM
