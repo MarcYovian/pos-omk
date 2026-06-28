@@ -56,11 +56,15 @@ describe('AppModal', () => {
   })
 
   it('renders with size class', () => {
-    const wrapper = mount(AppModal, {
+    const wrapperLg = mount(AppModal, {
       props: { modelValue: true, size: 'lg' },
     })
-    const modalContent = wrapper.find('.relative.w-full')
-    expect(modalContent.classes()).toContain('max-w-lg')
+    expect(wrapperLg.find('.relative.w-full').classes()).toContain('max-w-lg')
+
+    const wrapperXl = mount(AppModal, {
+      props: { modelValue: true, size: 'xl' },
+    })
+    expect(wrapperXl.find('.relative.w-full').classes()).toContain('max-w-5xl')
   })
 
   it('renders default slot content', () => {

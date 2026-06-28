@@ -6,7 +6,7 @@ const props = withDefaults(
   defineProps<{
     modelValue: boolean
     title?: string
-    size?: 'sm' | 'md' | 'lg' | 'full'
+    size?: 'sm' | 'md' | 'lg' | 'xl' | 'full'
     persistent?: boolean
   }>(),
   {
@@ -30,6 +30,7 @@ const modalWidth = computed(() => {
     sm: 'max-w-sm',
     md: 'max-w-md',
     lg: 'max-w-lg',
+    xl: 'max-w-5xl',
     full: 'max-w-full m-4'
   }
   return widths[props.size]

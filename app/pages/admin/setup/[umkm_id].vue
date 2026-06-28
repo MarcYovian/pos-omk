@@ -1,6 +1,6 @@
 <!-- pages/admin/setup/[umkm_id].vue -->
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useSessionStore } from '~/stores/session'
 import { useUmkmStore } from '~/stores/umkm'
@@ -14,6 +14,7 @@ import ProfileDropdown from '~/components/ui/ProfileDropdown.vue'
 import type { ProductAdmin } from '~/types/app'
 
 definePageMeta({
+  layout: 'admin',
   middleware: ['auth', 'admin']
 })
 
@@ -31,6 +32,46 @@ const hargaAsli = ref<number | ''>('')
 const hargaJual = ref<number | ''>('')
 const stokAwal = ref<number | ''>('')
 const isAddingProduct = ref(false)
+
+// Forecasting Assistant
+const recommendation = ref<any>(null)
+const isCheckingRec = ref(false)
+
+const checkRecommendation = async (name: string) => {
+  if (!name || name.trim().length < 3) {
+    recommendation.value = null
+    return
+  }
+  isCheckingRec.value = true
+  const supabase = useSupabase()
+  try {
+    const { data, error } = await supabase.rpc('get_product_stock_recommendation' as any, {
+      p_umkm_id: umkmId,
+      p_nama_produk: name.trim()
+    })
+    const recData = data as any[] | null
+    if (!error && recData && recData.length > 0) {
+      recommendation.value = recData[0]
+    } else {
+      recommendation.value = null
+    }
+  } catch (e) {
+    console.error(e)
+    recommendation.value = null
+  } finally {
+    isCheckingRec.value = false
+  }
+}
+
+watch(productName, (newVal) => {
+  checkRecommendation(newVal)
+})
+
+const applyRecommendation = () => {
+  if (recommendation.value) {
+    stokAwal.value = recommendation.value.recommendation
+  }
+}
 
 // Edit State
 const isEditModalOpen = ref(false)
@@ -202,162 +243,173 @@ const handleDelete = async (productId: string) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-50 flex flex-col">
-    <!-- Header -->
-    <header class="sticky top-0 z-30 bg-gradient-to-r from-brand-900 to-brand-700 text-white px-4 py-4 shadow-md flex items-center justify-between backdrop-blur-md">
+  <div class="w-full flex flex-col gap-6">
+    
+    <!-- Navigation Bar -->
+    <div class="flex items-center justify-between bg-white border border-slate-150 p-4 rounded-2xl shadow-sm">
       <div class="flex items-center gap-3">
-        <NuxtLink to="/admin/setup" class="hover:bg-white/10 p-2 rounded-xl transition flex items-center justify-center">
-          <Icon name="heroicons:arrow-left" class="w-5 h-5" />
+        <NuxtLink to="/admin/setup" class="hover:bg-slate-100 p-2 rounded-xl transition flex items-center justify-center">
+          <Icon name="heroicons:arrow-left" class="w-5 h-5 text-slate-500" />
         </NuxtLink>
-        <div class="flex flex-col">
-          <h1 class="text-md font-black tracking-tight leading-tight">Kelola Produk</h1>
-          <p class="text-xs text-brand-200 font-semibold font-mono leading-none mt-0.5">
-            {{ currentUmkm?.nama_umkm || 'Memuat...' }}
-          </p>
+        <div>
+          <h2 class="text-sm font-bold text-slate-800">Kelola Produk Mitra</h2>
+          <p class="text-xs text-slate-500 mt-0.5">{{ currentUmkm?.nama_umkm || 'Memuat...' }}</p>
         </div>
       </div>
-      <div class="flex items-center gap-2">
-        <ProfileDropdown variant="dark" />
-      </div>
-    </header>
+    </div>
 
-    <!-- Content -->
-    <main class="flex-grow p-6 max-w-3xl w-full mx-auto flex flex-col gap-6">
+    <!-- Add Product Card -->
+    <div v-if="!sessionStore.isClosed" class="bg-white border border-slate-150 p-6 rounded-2xl shadow-sm flex flex-col gap-4">
+      <h2 class="text-sm font-bold text-slate-800">Tambah Produk Baru</h2>
       
-      <!-- Add Product Card -->
-      <div v-if="!sessionStore.isClosed" class="bg-white border border-slate-150 p-6 rounded-2xl shadow-sm flex flex-col gap-4">
-        <h2 class="text-sm font-bold text-slate-800">Tambah Produk Baru</h2>
-        
-        <form @submit.prevent="handleAddProductSubmit" class="flex flex-col gap-4">
-          <AppInput
-            v-model="productName"
-            label="Nama Produk"
-            placeholder="Contoh: Kue Kering Nastar"
-            required
-          />
+      <form @submit.prevent="handleAddProductSubmit" class="flex flex-col gap-4">
+        <AppInput
+          v-model="productName"
+          label="Nama Produk"
+          placeholder="Contoh: Kue Kering Nastar"
+          required
+        />
 
-          <div class="grid grid-cols-2 gap-4">
-            <AppInput
-              v-model="hargaAsli"
-              label="Harga UMKM (Rp)"
-              type="number"
-              placeholder="Contoh: 10000"
-              input-mode="numeric"
-              required
-            />
-            
-            <AppInput
-              v-model="hargaJual"
-              label="Harga Jual POS (Rp)"
-              type="number"
-              placeholder="Contoh: 12000"
-              input-mode="numeric"
-              required
-            />
-          </div>
-
+        <div class="grid grid-cols-2 gap-4">
           <AppInput
-            v-model="stokAwal"
-            label="Stok Awal"
+            v-model="hargaAsli"
+            label="Harga UMKM (Rp)"
             type="number"
-            placeholder="Contoh: 10"
+            placeholder="Contoh: 10000"
             input-mode="numeric"
             required
           />
-
-          <AppButton
-            type="submit"
-            :loading="isAddingProduct"
-            class="self-end mt-2"
-          >
-            Tambah ke Catalog
-          </AppButton>
-        </form>
-      </div>
-
-      <!-- Configured Products list -->
-      <div class="flex flex-col gap-3">
-        <h2 class="text-sm font-bold text-slate-700">Daftar Produk Hari Ini</h2>
-        
-        <div v-if="umkmProducts.length === 0" class="text-center py-12 bg-white rounded-2xl border border-dashed text-slate-400 text-sm">
-          Belum ada produk yang didaftarkan untuk mitra ini hari ini.
+          
+          <AppInput
+            v-model="hargaJual"
+            label="Harga Jual POS (Rp)"
+            type="number"
+            placeholder="Contoh: 12000"
+            input-mode="numeric"
+            required
+          />
         </div>
 
-        <div v-else class="flex flex-col gap-3">
-          <div
-            v-for="p in umkmProducts"
-            :key="p.id"
-            class="bg-white border border-slate-150 rounded-2xl p-4 shadow-sm flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        <!-- Forecasting Banner -->
+        <div v-if="recommendation" class="p-3 bg-brand-50 border border-brand-100 rounded-xl flex items-center justify-between gap-3 text-xs">
+          <div class="flex items-start gap-2.5">
+            <Icon name="heroicons:sparkles" class="w-4 h-4 text-brand-600 shrink-0 mt-0.5" />
+            <div class="flex flex-col">
+              <span class="font-extrabold text-brand-900">Rekomendasi Asisten: {{ recommendation.recommendation }} Pcs</span>
+              <span class="text-[10px] text-brand-500 font-medium mt-0.5">
+                Berdasarkan penjualan sesi lalu (S1: {{ recommendation.s1_sold }}, S2: {{ recommendation.s2_sold }}, S3: {{ recommendation.s3_sold }})
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            @click="applyRecommendation"
+            class="text-[10px] font-black uppercase tracking-wider text-brand-700 bg-brand-100 hover:bg-brand-200 px-3 py-1.5 rounded-lg transition shrink-0"
           >
-            <!-- Product Details -->
-            <div class="flex flex-col gap-1 sm:w-2/3">
-              <h3 class="font-bold text-slate-800 text-sm leading-snug">{{ p.nama_produk }}</h3>
-              <div class="grid grid-cols-2 gap-x-2 gap-y-1 sm:flex sm:flex-wrap sm:gap-x-4 text-xs mt-1">
-                <div class="text-slate-400 font-mono font-bold flex flex-col sm:flex-row sm:gap-1">
-                  <span class="text-[10px] sm:text-xs">Harga UMKM:</span>
-                  <span>{{ useCurrencyFormat((p as ProductAdmin).harga_asli) }}</span>
-                </div>
-                <div class="text-slate-400 font-mono font-bold flex flex-col sm:flex-row sm:gap-1">
-                  <span class="text-[10px] sm:text-xs">Harga POS:</span>
-                  <span>{{ useCurrencyFormat(p.harga_jual) }}</span>
-                </div>
-                <div class="text-slate-500 font-mono font-semibold flex flex-col sm:flex-row sm:gap-1">
-                  <span class="text-[10px] sm:text-xs">Stok Awal:</span>
-                  <span>{{ p.stok_awal }}</span>
-                </div>
-                <div class="text-slate-500 font-mono font-semibold flex flex-col sm:flex-row sm:gap-1">
-                  <span class="text-[10px] sm:text-xs">Sisa:</span>
-                  <span>{{ p.stok_sekarang }}</span>
-                </div>
+            Gunakan
+          </button>
+        </div>
+
+        <AppInput
+          v-model="stokAwal"
+          label="Stok Awal"
+          type="number"
+          placeholder="Contoh: 10"
+          input-mode="numeric"
+          required
+        />
+
+        <AppButton
+          type="submit"
+          :loading="isAddingProduct"
+          class="self-end mt-2"
+        >
+          Tambah ke Catalog
+        </AppButton>
+      </form>
+    </div>
+
+    <!-- Configured Products list -->
+    <div class="flex flex-col gap-3">
+      <h2 class="text-sm font-bold text-slate-700">Daftar Produk Hari Ini</h2>
+      
+      <div v-if="umkmProducts.length === 0" class="text-center py-12 bg-white rounded-2xl border border-dashed text-slate-400 text-sm">
+        Belum ada produk yang didaftarkan untuk mitra ini hari ini.
+      </div>
+
+      <div v-else class="flex flex-col gap-3">
+        <div
+          v-for="p in umkmProducts"
+          :key="p.id"
+          class="bg-white border border-slate-150 rounded-2xl p-4 shadow-sm flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <!-- Product Details -->
+          <div class="flex flex-col gap-1 sm:w-2/3">
+            <h3 class="font-bold text-slate-800 text-sm leading-snug">{{ p.nama_produk }}</h3>
+            <div class="grid grid-cols-2 gap-x-2 gap-y-1 sm:flex sm:flex-wrap sm:gap-x-4 text-xs mt-1">
+              <div class="text-slate-400 font-mono font-bold flex flex-col sm:flex-row sm:gap-1">
+                <span class="text-[10px] sm:text-xs">Harga UMKM:</span>
+                <span>{{ useCurrencyFormat((p as ProductAdmin).harga_asli) }}</span>
+              </div>
+              <div class="text-slate-400 font-mono font-bold flex flex-col sm:flex-row sm:gap-1">
+                <span class="text-[10px] sm:text-xs">Harga POS:</span>
+                <span>{{ useCurrencyFormat(p.harga_jual) }}</span>
+              </div>
+              <div class="text-slate-500 font-mono font-semibold flex flex-col sm:flex-row sm:gap-1">
+                <span class="text-[10px] sm:text-xs">Stok Awal:</span>
+                <span>{{ p.stok_awal }}</span>
+              </div>
+              <div class="text-slate-500 font-mono font-semibold flex flex-col sm:flex-row sm:gap-1">
+                <span class="text-[10px] sm:text-xs">Sisa:</span>
+                <span>{{ p.stok_sekarang }}</span>
               </div>
             </div>
-            
-            <!-- Active Toggle & Edit/Delete Button -->
-            <div class="flex items-center justify-between sm:justify-end gap-3 border-t border-slate-100 pt-3 sm:border-t-0 sm:pt-0">
-              <!-- Edit/Delete buttons -->
-              <div class="flex items-center gap-1">
-                <button
-                  @click="handleDelete(p.id)"
-                  :disabled="sessionStore.isClosed"
-                  class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50 min-h-[32px] min-w-[32px] flex items-center justify-center"
-                  title="Hapus Produk"
-                >
-                  <Icon name="heroicons:trash" class="w-5 h-5" />
-                </button>
+          </div>
+          
+          <!-- Active Toggle & Edit/Delete Button -->
+          <div class="flex items-center justify-between sm:justify-end gap-3 border-t border-slate-100 pt-3 sm:border-t-0 sm:pt-0">
+            <!-- Edit/Delete buttons -->
+            <div class="flex items-center gap-1">
+              <button
+                @click="handleDelete(p.id)"
+                :disabled="sessionStore.isClosed"
+                class="p-1.5 text-slate-400 hover:text-red-650 hover:bg-red-50 rounded-lg transition disabled:opacity-50 min-h-[32px] min-w-[32px] flex items-center justify-center"
+                title="Hapus Produk"
+              >
+                <Icon name="heroicons:trash" class="w-5 h-5" />
+              </button>
 
-                <button
-                  @click="openEditModal(p as ProductAdmin)"
-                  :disabled="sessionStore.isClosed"
-                  class="p-1.5 text-slate-400 hover:text-brand-900 hover:bg-slate-100 rounded-lg transition disabled:opacity-50 min-h-[32px] min-w-[32px] flex items-center justify-center"
-                  title="Edit Produk"
-                >
-                  <Icon name="heroicons:pencil-square" class="w-5 h-5" />
-                </button>
-              </div>
+              <button
+                @click="openEditModal(p as ProductAdmin)"
+                :disabled="sessionStore.isClosed"
+                class="p-1.5 text-slate-400 hover:text-brand-900 hover:bg-slate-100 rounded-lg transition disabled:opacity-50 min-h-[32px] min-w-[32px] flex items-center justify-center"
+                title="Edit Produk"
+              >
+                <Icon name="heroicons:pencil-square" class="w-5 h-5" />
+              </button>
+            </div>
 
-              <!-- Toggle switch container -->
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-bold" :class="p.is_active ? 'text-success' : 'text-slate-400'">
-                  {{ p.is_active ? 'Aktif' : 'Nonaktif' }}
-                </span>
-                <button
-                  @click="handleToggleActive(p as ProductAdmin)"
-                  :disabled="sessionStore.isClosed"
-                  class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none min-h-[24px] min-w-[44px]"
-                  :class="p.is_active ? 'bg-brand-900' : 'bg-slate-200'"
-                >
-                  <span
-                    class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                    :class="p.is_active ? 'translate-x-5' : 'translate-x-0'"
-                  />
-                </button>
-              </div>
+            <!-- Toggle switch container -->
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold" :class="p.is_active ? 'text-success' : 'text-slate-400'">
+                {{ p.is_active ? 'Aktif' : 'Nonaktif' }}
+              </span>
+              <button
+                @click="handleToggleActive(p as ProductAdmin)"
+                :disabled="sessionStore.isClosed"
+                class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none min-h-[24px] min-w-[44px]"
+                :class="p.is_active ? 'bg-brand-900' : 'bg-slate-200'"
+              >
+                <span
+                  class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                  :class="p.is_active ? 'translate-x-5' : 'translate-x-0'"
+                />
+              </button>
             </div>
           </div>
         </div>
       </div>
-
-    </main>
+    </div>
 
     <!-- Edit Product Modal -->
     <AppModal

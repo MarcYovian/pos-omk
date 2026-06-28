@@ -12,6 +12,7 @@ import ProfileDropdown from '~/components/ui/ProfileDropdown.vue'
 import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({
+  layout: 'admin',
   middleware: ['auth', 'admin']
 })
 
@@ -170,67 +171,29 @@ const handleConfirmClose = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-50 flex flex-col font-sans">
-    <!-- Header -->
-    <header class="sticky top-0 z-30 bg-gradient-to-r from-brand-900 to-brand-700 text-white px-4 py-4 shadow-md flex items-center justify-between backdrop-blur-md">
-      <div class="flex items-center gap-3">
-        <NuxtLink to="/admin" class="hover:bg-white/10 p-2 rounded-xl transition flex items-center justify-center">
-          <Icon name="heroicons:arrow-left" class="w-5 h-5" />
-        </NuxtLink>
-        <div>
-          <h1 class="text-lg font-black tracking-tight leading-none">Rekonsiliasi Stok</h1>
-          <p class="text-[10px] text-brand-200 mt-1 font-medium font-mono">Sesi: {{ sessionStore.sessionDate }}</p>
-        </div>
+  <div class="w-full flex flex-col gap-6">
+    
+    <!-- Session Closed Banner -->
+    <div v-if="sessionStore.isClosed" class="p-4 bg-red-50 border border-red-200 rounded-2xl text-center text-xs font-semibold text-red-700 flex flex-col md:flex-row items-center justify-between gap-3 shadow-sm">
+      <div class="flex items-center gap-2.5">
+        <Icon name="heroicons:lock-closed" class="w-5 h-5 text-red-500 animate-pulse" />
+        <span>Sesi ini telah DITUTUP dan dikunci. Data rekonsiliasi bersifat read-only.</span>
       </div>
-      
-      <div class="flex items-center gap-2">
-        <AppButton
-          v-if="!sessionStore.isClosed && productStore.products.length > 0"
-          variant="secondary"
-          size="sm"
-          class="!bg-white !text-brand-900 hover:!bg-slate-100 border-0 text-xs font-bold shadow-sm"
-          @click="showMatchAllConfirm = true"
-        >
-          Cocokkan Semua
-        </AppButton>
-        
-        <AppButton
-          v-if="!sessionStore.isClosed"
-          :disabled="!isAllFilled"
-          @click="handleCloseSessionClick"
-          variant="primary"
-          size="sm"
-          class="!bg-emerald-600 hover:!bg-emerald-700 !text-white shadow-sm font-bold text-xs border-0 disabled:!opacity-50"
-        >
-          Tutup Sesi
-        </AppButton>
-        <ProfileDropdown variant="dark" />
-      </div>
-    </header>
+      <AppButton
+        v-if="canReopen"
+        @click="handleReopenSession"
+        variant="secondary"
+        size="sm"
+        class="!bg-red-100 !text-red-700 hover:!bg-red-200 border-0 font-bold text-xs self-center"
+        :loading="isReopening"
+      >
+        Buka Kembali Sesi
+      </AppButton>
+    </div>
 
-    <!-- Main Content -->
-    <main class="flex-grow p-4 md:p-6 max-w-3xl w-full mx-auto flex flex-col gap-6">
-      
-      <!-- Session Closed Banner -->
-      <div v-if="sessionStore.isClosed" class="p-4 bg-red-50 border border-red-200 rounded-2xl text-center text-xs font-semibold text-red-700 flex flex-col md:flex-row items-center justify-between gap-3 shadow-sm">
-        <div class="flex items-center gap-2.5">
-          <Icon name="heroicons:lock-closed" class="w-5 h-5 text-red-500 animate-pulse" />
-          <span>Sesi ini telah DITUTUP dan dikunci. Data rekonsiliasi bersifat read-only.</span>
-        </div>
-        <AppButton
-          v-if="canReopen"
-          @click="handleReopenSession"
-          variant="secondary"
-          size="sm"
-          class="!bg-red-100 !text-red-700 hover:!bg-red-200 border-0 font-bold text-xs self-center"
-          :loading="isReopening"
-        >
-          Buka Kembali Sesi
-        </AppButton>
-      </div>
-
-      <!-- Stats Widget Card -->
-      <div class="bg-white border border-slate-150 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+    <!-- Stats & Actions Widget Card -->
+    <div class="bg-white border border-slate-150 rounded-2xl p-5 shadow-sm flex flex-col gap-4">
+      <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
         <div class="flex flex-col gap-1 text-center md:text-left">
           <span class="text-xs text-slate-500 font-medium">Progress Rekonsiliasi</span>
           <h2 class="text-xl font-extrabold text-slate-800">Periksa Sisa Kue Fisik</h2>
@@ -249,77 +212,100 @@ const handleConfirmClose = async () => {
           </span>
         </div>
       </div>
-
-      <!-- Reconciliation List -->
-      <div class="flex flex-col gap-4">
-        <div
-          v-for="p in productStore.products"
-          :key="p.id"
-          class="bg-white border border-slate-150 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col gap-4"
+      
+      <!-- Action buttons -->
+      <div v-if="!sessionStore.isClosed" class="flex gap-3 justify-end border-t border-slate-100 pt-4">
+        <AppButton
+          v-if="productStore.products.length > 0"
+          variant="secondary"
+          size="sm"
+          class="font-bold text-xs shadow-sm"
+          @click="showMatchAllConfirm = true"
         >
-          <div class="flex items-start justify-between gap-3">
-            <div class="flex flex-col gap-1.5">
-              <div class="flex items-center gap-2">
-                <span class="text-[10px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-md">
-                  {{ p.umkm?.nama_umkm || 'Mitra' }}
-                </span>
-                <span class="text-[10px] bg-brand-50 text-brand-700 font-extrabold px-2 py-0.5 rounded-md font-mono">
-                  Sisa Sistem: {{ p.stok_sekarang }}
-                </span>
-              </div>
-              <h3 class="font-extrabold text-slate-800 text-base leading-snug">{{ p.nama_produk }}</h3>
+          Cocokkan Semua
+        </AppButton>
+        
+        <AppButton
+          :disabled="!isAllFilled"
+          @click="handleCloseSessionClick"
+          variant="primary"
+          size="sm"
+          class="!bg-emerald-600 hover:!bg-emerald-700 !text-white shadow-sm font-bold text-xs border-0 disabled:!opacity-50"
+        >
+          Tutup Sesi
+        </AppButton>
+      </div>
+    </div>
+
+    <!-- Reconciliation List -->
+    <div class="flex flex-col gap-4">
+      <div
+        v-for="p in productStore.products"
+        :key="p.id"
+        class="bg-white border border-slate-150 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col gap-4"
+      >
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex flex-col gap-1.5">
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-md">
+                {{ p.umkm?.nama_umkm || 'Mitra' }}
+              </span>
+              <span class="text-[10px] bg-brand-50 text-brand-700 font-extrabold px-2 py-0.5 rounded-md font-mono">
+                Sisa Sistem: {{ p.stok_sekarang }}
+              </span>
             </div>
-            
-            <!-- Quick action: Match for single product -->
-            <button
-              v-if="!sessionStore.isClosed && physicalCounts[p.id] !== p.stok_sekarang"
-              @click="copySystemStock(p.id, p.stok_sekarang)"
-              class="flex items-center gap-1 text-[11px] font-bold text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 px-2.5 py-1.5 rounded-xl transition duration-150 self-start border border-brand-100 shadow-sm"
-              title="Set jumlah fisik sama dengan sisa sistem"
-            >
-              <Icon name="heroicons:check-circle" class="w-3.5 h-3.5" />
-              Cocok
-            </button>
+            <h3 class="font-extrabold text-slate-800 text-base leading-snug">{{ p.nama_produk }}</h3>
+          </div>
+          
+          <!-- Quick action: Match for single product -->
+          <button
+            v-if="!sessionStore.isClosed && physicalCounts[p.id] !== p.stok_sekarang"
+            @click="copySystemStock(p.id, p.stok_sekarang)"
+            class="flex items-center gap-1 text-[11px] font-bold text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 px-2.5 py-1.5 rounded-xl transition duration-150 self-start border border-brand-100 shadow-sm"
+            title="Set jumlah fisik sama dengan sisa sistem"
+          >
+            <Icon name="heroicons:check-circle" class="w-3.5 h-3.5" />
+            Cocok
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between border-t border-slate-100 pt-4 gap-4">
+          <!-- Difference indicator status -->
+          <div>
+            <div v-if="getSelisih(p.id, p.stok_sekarang) !== null" class="transition-all duration-200">
+              <div v-if="getSelisih(p.id, p.stok_sekarang) === 0" class="flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1.5 rounded-xl">
+                <Icon name="heroicons:check-badge" class="w-4 h-4 text-emerald-500" />
+                <span>Stok Cocok</span>
+              </div>
+              <div v-else-if="getSelisih(p.id, p.stok_sekarang)! > 0" class="flex items-center gap-1 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1.5 rounded-xl">
+                <Icon name="heroicons:plus-circle" class="w-4 h-4 text-blue-500" />
+                <span>Lebih: +{{ getSelisih(p.id, p.stok_sekarang) }}</span>
+              </div>
+              <div v-else class="flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-100 px-2.5 py-1.5 rounded-xl">
+                <Icon name="heroicons:minus-circle" class="w-4 h-4 text-amber-500" />
+                <span>Kurang: {{ getSelisih(p.id, p.stok_sekarang) }}</span>
+              </div>
+            </div>
+            <span class="text-xs text-slate-400 font-medium italic" v-else>Belum diisi</span>
           </div>
 
-          <div class="flex items-center justify-between border-t border-slate-100 pt-4 gap-4">
-            <!-- Difference indicator status -->
-            <div>
-              <div v-if="getSelisih(p.id, p.stok_sekarang) !== null" class="transition-all duration-200">
-                <div v-if="getSelisih(p.id, p.stok_sekarang) === 0" class="flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1.5 rounded-xl">
-                  <Icon name="heroicons:check-badge" class="w-4 h-4 text-emerald-500" />
-                  <span>Stok Cocok</span>
-                </div>
-                <div v-else-if="getSelisih(p.id, p.stok_sekarang)! > 0" class="flex items-center gap-1 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1.5 rounded-xl">
-                  <Icon name="heroicons:plus-circle" class="w-4 h-4 text-blue-500" />
-                  <span>Lebih: +{{ getSelisih(p.id, p.stok_sekarang) }}</span>
-                </div>
-                <div v-else class="flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-100 px-2.5 py-1.5 rounded-xl">
-                  <Icon name="heroicons:minus-circle" class="w-4 h-4 text-amber-500" />
-                  <span>Kurang: {{ getSelisih(p.id, p.stok_sekarang) }}</span>
-                </div>
-              </div>
-              <span class="text-xs text-slate-400 font-medium italic" v-else>Belum diisi</span>
-            </div>
-
-            <!-- Input Box with nice controls -->
-            <div class="flex items-center gap-2">
-              <span class="text-xs text-slate-500 font-medium">Stok Fisik:</span>
-              <div class="w-24 relative">
-                <AppInput
-                  v-model="physicalCounts[p.id]"
-                  type="number"
-                  placeholder="Fisik"
-                  input-mode="numeric"
-                  :disabled="sessionStore.isClosed || isSubmitting"
-                  class="text-center font-mono font-bold !rounded-xl text-slate-800"
-                />
-              </div>
+          <!-- Input Box with nice controls -->
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-500 font-medium">Stok Fisik:</span>
+            <div class="w-24 relative">
+              <AppInput
+                v-model="physicalCounts[p.id]"
+                type="number"
+                placeholder="Fisik"
+                input-mode="numeric"
+                :disabled="sessionStore.isClosed || isSubmitting"
+                class="text-center font-mono font-bold !rounded-xl text-slate-800"
+              />
             </div>
           </div>
         </div>
       </div>
-    </main>
+    </div>
 
     <!-- Confirmation Modal: Close Session -->
     <AppModal

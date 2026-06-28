@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '~/stores/auth'
 import { useToast } from '~/composables/useToast'
 import AppButton from '~/components/ui/AppButton.vue'
@@ -9,6 +9,7 @@ import AppToast from '~/components/ui/AppToast.vue'
 import ProfileDropdown from '~/components/ui/ProfileDropdown.vue'
 
 definePageMeta({
+  layout: 'admin',
   middleware: ['auth', 'admin']
 })
 
@@ -18,6 +19,17 @@ const { addToast } = useToast()
 // State
 const users = ref<UserRecord[]>([])
 const isLoading = ref(false)
+const searchQuery = ref('')
+
+const filteredUsers = computed(() => {
+  if (!searchQuery.value.trim()) return users.value
+  const query = searchQuery.value.toLowerCase().trim()
+  return users.value.filter(u => 
+    u.email.toLowerCase().includes(query) || 
+    u.role.toLowerCase().includes(query) ||
+    u.id.toLowerCase().includes(query)
+  )
+})
 
 // Modals
 const isCreateOpen = ref(false)
@@ -206,143 +218,147 @@ const handleToggleActive = async (user: UserRecord) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-50 flex flex-col">
-    <!-- Header -->
-    <header class="sticky top-0 z-30 bg-gradient-to-r from-brand-900 to-brand-700 text-white px-4 py-4 shadow-md flex items-center justify-between backdrop-blur-md">
-      <div class="flex items-center gap-3">
-        <NuxtLink to="/admin" class="hover:bg-white/10 p-2 rounded-xl transition flex items-center justify-center">
-          <Icon name="heroicons:arrow-left" class="w-5 h-5" />
-        </NuxtLink>
-        <div>
-          <h1 class="text-lg font-black tracking-tight leading-none">Manajemen Pengguna</h1>
-          <p class="text-[10px] text-brand-200 mt-1 font-medium font-mono">Layanan Pengelola</p>
-        </div>
+  <div class="w-full flex flex-col gap-6">
+    
+    <!-- Action Top Bar -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-slate-150 p-4 rounded-2xl shadow-sm">
+      <div>
+        <h2 class="text-sm font-bold text-slate-800">Daftar Pengguna Sistem</h2>
+        <p class="text-xs text-slate-500 mt-0.5">Kelola akses kasir dan administrator</p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+        <!-- Search Input -->
+        <div class="relative w-full sm:w-64">
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Cari email, role, atau ID..."
+            class="w-full text-xs font-semibold pl-8 pr-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 bg-slate-50/50"
+          />
+          <Icon name="heroicons:magnifying-glass" class="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+        </div>
         <AppButton
           @click="handleOpenCreate"
           size="sm"
-          variant="secondary"
-          class="!bg-white !text-brand-900 hover:!bg-slate-100 border-0 text-xs font-bold shadow-sm"
+          variant="primary"
+          class="font-bold text-xs shadow-sm shrink-0"
         >
           Tambah User
         </AppButton>
-        <ProfileDropdown variant="dark" />
       </div>
-    </header>
+    </div>
 
-    <!-- Content -->
-    <main class="flex-grow p-6 max-w-4xl w-full mx-auto flex flex-col gap-6">
-      
-      <div v-if="isLoading" class="text-center py-12 text-slate-400">
-        Memuat daftar pengguna...
-      </div>
+    <div v-if="isLoading" class="text-center py-12 text-slate-400">
+      Memuat daftar pengguna...
+    </div>
 
-      <div v-else-if="users.length === 0" class="text-center py-12 bg-white border border-slate-150 rounded-2xl shadow-sm text-slate-400">
-        Belum ada pengguna terdaftar.
-      </div>
+    <div v-else-if="users.length === 0" class="text-center py-12 bg-white border border-slate-150 rounded-2xl shadow-sm text-slate-400">
+      Belum ada pengguna terdaftar.
+    </div>
 
-      <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div
-          v-for="u in users"
-          :key="u.id"
-          class="bg-white border border-slate-150 rounded-2xl p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between gap-4"
-        >
-          <div class="flex flex-col gap-2">
-            <!-- Email & Anda Badge -->
-            <div class="flex items-start justify-between gap-2">
-              <h3 class="font-extrabold text-slate-800 text-sm leading-snug break-all flex-grow">
-                {{ u.email }}
-              </h3>
-              <span v-if="u.id === authStore.user?.id" class="text-[9px] bg-brand-50 text-brand-900 border border-brand-100 font-extrabold px-2 py-0.5 rounded-full shrink-0">
-                Anda
-              </span>
-            </div>
+    <div v-else-if="filteredUsers.length === 0" class="text-center py-12 bg-white border border-slate-150 rounded-2xl shadow-sm text-slate-400">
+      Tidak ada pengguna yang cocok dengan pencarian "{{ searchQuery }}".
+    </div>
 
-            <!-- User ID -->
-            <p class="text-[10px] text-slate-400 font-semibold font-mono break-all">ID: {{ u.id }}</p>
-            
-            <!-- Badges -->
-            <div class="flex flex-wrap gap-2 mt-1">
-              <span
-                class="text-[10px] font-bold px-2 py-0.5 rounded-full capitalize"
-                :class="u.role === 'admin' ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-green-50 text-green-700 border border-green-100'"
-              >
-                {{ u.role }}
-              </span>
-              <span
-                class="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                :class="u.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-50 text-slate-500 border border-slate-100'"
-              >
-                {{ u.is_active ? 'Aktif' : 'Nonaktif' }}
-              </span>
-              <span
-                class="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                :class="u.email_confirmed_at ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-amber-50 text-amber-700 border border-amber-100'"
-              >
-                {{ u.email_confirmed_at ? 'Terverifikasi' : 'Belum Verifikasi' }}
-              </span>
-            </div>
+    <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div
+        v-for="u in filteredUsers"
+        :key="u.id"
+        class="bg-white border border-slate-150 rounded-2xl p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between gap-4"
+      >
+        <div class="flex flex-col gap-2">
+          <!-- Email & Anda Badge -->
+          <div class="flex items-start justify-between gap-2">
+            <h3 class="font-extrabold text-slate-800 text-sm leading-snug break-all flex-grow">
+              {{ u.email }}
+            </h3>
+            <span v-if="u.id === authStore.user?.id" class="text-[9px] bg-brand-50 text-brand-900 border border-brand-100 font-extrabold px-2 py-0.5 rounded-full shrink-0">
+              Anda
+            </span>
           </div>
 
-          <!-- Actions & Timestamps Row -->
-          <div class="border-t border-slate-100 pt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <!-- Timestamps -->
-            <div class="flex justify-between sm:flex-col sm:gap-0.5 text-[10px] text-slate-400 font-semibold font-mono">
-              <span>Dibuat: {{ new Date(u.created_at).toLocaleDateString('id-ID') }}</span>
-              <span v-if="u.last_sign_in_at">Masuk: {{ new Date(u.last_sign_in_at).toLocaleDateString('id-ID') }}</span>
-              <span v-else class="text-slate-300 font-normal">Belum masuk</span>
-            </div>
+          <!-- User ID -->
+          <p class="text-[10px] text-slate-400 font-semibold font-mono break-all">ID: {{ u.id }}</p>
+          
+          <!-- Badges -->
+          <div class="flex flex-wrap gap-2 mt-1">
+            <span
+              class="text-[10px] font-bold px-2 py-0.5 rounded-full capitalize"
+              :class="u.role === 'admin' ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-green-50 text-green-700 border border-green-100'"
+            >
+              {{ u.role }}
+            </span>
+            <span
+              class="text-[10px] font-bold px-2 py-0.5 rounded-full"
+              :class="u.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-50 text-slate-500 border border-slate-100'"
+            >
+              {{ u.is_active ? 'Aktif' : 'Nonaktif' }}
+            </span>
+            <span
+              class="text-[10px] font-bold px-2 py-0.5 rounded-full"
+              :class="u.email_confirmed_at ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-amber-50 text-amber-700 border border-amber-100'"
+            >
+              {{ u.email_confirmed_at ? 'Terverifikasi' : 'Belum Verifikasi' }}
+            </span>
+          </div>
+        </div>
 
-            <!-- Action buttons -->
-            <div class="flex items-center justify-end gap-1.5 border-t border-slate-50 pt-2.5 sm:border-t-0 sm:pt-0">
-              <!-- Toggle active/inactive status (for marcellinusyovian@gmail.com only) -->
-              <button
-                v-if="authStore.user?.email === 'marcellinusyovian@gmail.com' && u.email !== 'marcellinusyovian@gmail.com'"
-                @click="handleToggleActive(u)"
-                :disabled="isTogglingActive[u.id]"
-                class="p-1.5 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center disabled:opacity-50 border border-slate-150 bg-slate-50"
-                :class="u.is_active ? 'text-slate-400 hover:text-danger hover:bg-red-50' : 'text-slate-400 hover:text-emerald-600 hover:bg-green-50'"
-                :title="u.is_active ? 'Nonaktifkan Pengguna' : 'Aktifkan Pengguna'"
-              >
-                <Icon :name="u.is_active ? 'heroicons:no-symbol' : 'heroicons:check-circle'" class="w-4.5 h-4.5" />
-              </button>
-              <button
-                v-if="!u.email_confirmed_at"
-                @click="handleSendVerification(u.id)"
-                class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 border border-slate-150 bg-slate-50 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
-                title="Kirim Email Verifikasi"
-              >
-                <Icon name="heroicons:envelope" class="w-4.5 h-4.5" />
-              </button>
-              <button
-                @click="handleSendResetEmail(u.id)"
-                class="p-1.5 text-slate-400 hover:text-warning hover:bg-amber-50 border border-slate-150 bg-slate-50 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
-                title="Kirim Link Reset Sandi"
-              >
-                <Icon name="heroicons:key" class="w-4.5 h-4.5" />
-              </button>
-              <button
-                @click="handleOpenEdit(u)"
-                class="p-1.5 text-slate-400 hover:text-brand-900 hover:bg-slate-100 border border-slate-150 bg-slate-50 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
-                title="Edit Pengguna"
-              >
-                <Icon name="heroicons:pencil-square" class="w-4.5 h-4.5" />
-              </button>
-              <button
-                @click="handleOpenDelete(u)"
-                v-if="u.id !== authStore.user?.id"
-                class="p-1.5 text-slate-400 hover:text-danger hover:bg-red-50 border border-slate-150 bg-slate-50 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
-                title="Hapus Pengguna"
-              >
-                <Icon name="heroicons:trash" class="w-4.5 h-4.5" />
-              </button>
-            </div>
+        <!-- Actions & Timestamps Row -->
+        <div class="border-t border-slate-100 pt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <!-- Timestamps -->
+          <div class="flex justify-between sm:flex-col sm:gap-0.5 text-[10px] text-slate-400 font-semibold font-mono">
+            <span>Dibuat: {{ new Date(u.created_at).toLocaleDateString('id-ID') }}</span>
+            <span v-if="u.last_sign_in_at">Masuk: {{ new Date(u.last_sign_in_at).toLocaleDateString('id-ID') }}</span>
+            <span v-else class="text-slate-300 font-normal">Belum masuk</span>
+          </div>
+
+          <!-- Action buttons -->
+          <div class="flex items-center justify-end gap-1.5 border-t border-slate-50 pt-2.5 sm:border-t-0 sm:pt-0">
+            <!-- Toggle active/inactive status (for marcellinusyovian@gmail.com only) -->
+            <button
+              v-if="authStore.user?.email === 'marcellinusyovian@gmail.com' && u.email !== 'marcellinusyovian@gmail.com'"
+              @click="handleToggleActive(u)"
+              :disabled="isTogglingActive[u.id]"
+              class="p-1.5 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center disabled:opacity-50 border border-slate-150 bg-slate-50"
+              :class="u.is_active ? 'text-slate-400 hover:text-danger hover:bg-red-50' : 'text-slate-400 hover:text-emerald-600 hover:bg-green-50'"
+              :title="u.is_active ? 'Nonaktifkan Pengguna' : 'Aktifkan Pengguna'"
+            >
+              <Icon :name="u.is_active ? 'heroicons:no-symbol' : 'heroicons:check-circle'" class="w-4.5 h-4.5" />
+            </button>
+            <button
+              v-if="!u.email_confirmed_at"
+              @click="handleSendVerification(u.id)"
+              class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 border border-slate-150 bg-slate-50 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
+              title="Kirim Email Verifikasi"
+            >
+              <Icon name="heroicons:envelope" class="w-4.5 h-4.5" />
+            </button>
+            <button
+              @click="handleSendResetEmail(u.id)"
+              class="p-1.5 text-slate-400 hover:text-warning hover:bg-amber-50 border border-slate-150 bg-slate-50 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
+              title="Kirim Link Reset Sandi"
+            >
+              <Icon name="heroicons:key" class="w-4.5 h-4.5" />
+            </button>
+            <button
+              @click="handleOpenEdit(u)"
+              class="p-1.5 text-slate-400 hover:text-brand-900 hover:bg-slate-100 border border-slate-150 bg-slate-50 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
+              title="Edit Pengguna"
+            >
+              <Icon name="heroicons:pencil-square" class="w-4.5 h-4.5" />
+            </button>
+            <button
+              @click="handleOpenDelete(u)"
+              v-if="u.id !== authStore.user?.id"
+              class="p-1.5 text-slate-400 hover:text-danger hover:bg-red-50 border border-slate-150 bg-slate-50 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
+              title="Hapus Pengguna"
+            >
+              <Icon name="heroicons:trash" class="w-4.5 h-4.5" />
+            </button>
           </div>
         </div>
       </div>
-
-    </main>
+    </div>
 
     <!-- Create User Modal -->
     <AppModal v-model="isCreateOpen" title="Daftarkan Pengguna Baru">

@@ -11,6 +11,7 @@ import AppToast from '~/components/ui/AppToast.vue'
 import ProfileDropdown from '~/components/ui/ProfileDropdown.vue'
 
 definePageMeta({
+  layout: 'admin',
   middleware: ['auth', 'admin']
 })
 
@@ -144,107 +145,87 @@ const handleSendWA = (phone: string, umkmId: string) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-50 flex flex-col">
-    <!-- Header -->
-    <header class="sticky top-0 z-30 bg-gradient-to-r from-brand-900 to-brand-700 text-white px-4 py-4 shadow-md flex items-center justify-between backdrop-blur-md">
-      <div class="flex items-center gap-3">
-        <NuxtLink to="/admin" class="hover:bg-white/10 p-2 rounded-xl transition flex items-center justify-center">
-          <Icon name="heroicons:arrow-left" class="w-5 h-5" />
-        </NuxtLink>
-        <div>
-          <h1 class="text-lg font-black tracking-tight leading-none">Laporan WhatsApp</h1>
-          <p class="text-[10px] text-brand-200 mt-1 font-medium font-mono">Layanan Pengelola</p>
-        </div>
-      </div>
-      <div class="flex items-center gap-2">
-        <ProfileDropdown variant="dark" />
-      </div>
-    </header>
+  <div class="w-full flex flex-col gap-6">
+    
+    <div v-if="isLoading" class="text-center py-12">
+      <p class="text-slate-500 font-medium">Memuat data laporan...</p>
+    </div>
 
-    <!-- Content -->
-    <main class="flex-grow p-6 max-w-3xl w-full mx-auto flex flex-col gap-6">
-      
-      <div v-if="isLoading" class="text-center py-12">
-        <p class="text-slate-500 font-medium">Memuat data laporan...</p>
+    <div v-else-if="Object.keys(reports).length === 0" class="text-center py-12 bg-white border rounded-2xl">
+      <p class="text-slate-400 text-sm">Tidak ada produk aktif atau data laporan untuk sesi hari ini.</p>
+    </div>
+
+    <template v-else>
+      <div class="flex justify-between items-center">
+        <h2 class="text-sm font-bold text-slate-700">Kirim Rincian Komisi ke Mitra</h2>
+        <span class="text-xs text-slate-500 font-mono font-semibold">{{ sessionStore.sessionDate }}</span>
       </div>
 
-      <div v-else-if="Object.keys(reports).length === 0" class="text-center py-12 bg-white border rounded-2xl">
-        <p class="text-slate-400 text-sm">Tidak ada produk aktif atau data laporan untuk sesi hari ini.</p>
-      </div>
-
-      <template v-else>
-        <div class="flex justify-between items-center">
-          <h2 class="text-sm font-bold text-slate-700">Kirim Rincian Komisi ke Mitra</h2>
-          <span class="text-xs text-slate-500 font-mono font-semibold">{{ sessionStore.sessionDate }}</span>
-        </div>
-
-        <!-- Reports Cards -->
-        <div class="flex flex-col gap-6">
-          <div
-            v-for="u in umkmStore.umkmList"
-            :key="u.id"
-            v-show="reports[u.id]"
-            class="bg-white border border-slate-150 rounded-2xl p-5 shadow-sm flex flex-col gap-4"
-          >
-            <!-- Card Head -->
-            <div class="flex justify-between items-start border-b border-slate-100 pb-3">
-              <div>
-                <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
-                  <Icon name="heroicons:tag-solid" class="w-4 h-4 text-brand-900" />
-                  <span>{{ u.nama_umkm }}</span>
-                </h3>
-                <span class="text-xs font-mono font-bold text-slate-400">wa.me/{{ u.kontak_wa }}</span>
-              </div>
-              
-              <!-- Sent Status Indicator -->
-              <span
-                v-if="sentState[u.id]"
-                class="text-[10px] bg-green-50 text-success border border-green-100 px-2 py-0.5 rounded-full font-bold flex items-center gap-1"
-              >
-                <Icon name="heroicons:check-circle-solid" class="w-3.5 h-3.5" />
-                <span>Terkirim</span>
-              </span>
+      <!-- Reports Cards -->
+      <div class="flex flex-col gap-6">
+        <div
+          v-for="u in umkmStore.umkmList"
+          :key="u.id"
+          v-show="reports[u.id]"
+          class="bg-white border border-slate-150 rounded-2xl p-5 shadow-sm flex flex-col gap-4"
+        >
+          <!-- Card Head -->
+          <div class="flex justify-between items-start border-b border-slate-100 pb-3">
+            <div>
+              <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                <Icon name="heroicons:tag-solid" class="w-4 h-4 text-brand-900" />
+                <span>{{ u.nama_umkm }}</span>
+              </h3>
+              <span class="text-xs font-mono font-bold text-slate-400">wa.me/{{ u.kontak_wa }}</span>
             </div>
+            
+            <!-- Sent Status Indicator -->
+            <span
+              v-if="sentState[u.id]"
+              class="text-[10px] bg-green-50 text-success border border-green-100 px-2 py-0.5 rounded-full font-bold flex items-center gap-1"
+            >
+              <Icon name="heroicons:check-circle-solid" class="w-3.5 h-3.5" />
+              <span>Terkirim</span>
+            </span>
+          </div>
 
-            <!-- Report Text Box Preview -->
-            <div class="bg-slate-900 text-slate-200 p-4 rounded-xl font-mono text-xs whitespace-pre-wrap leading-relaxed select-all">
-              {{ reports[u.id] }}
-            </div>
+          <!-- Report Text Box Preview -->
+          <div class="bg-slate-900 text-slate-200 p-4 rounded-xl font-mono text-xs whitespace-pre-wrap leading-relaxed select-all">
+            {{ reports[u.id] }}
+          </div>
 
-            <!-- Action buttons -->
-            <div class="flex items-center gap-3">
-              <AppButton
-                @click="handleSendWA(u.kontak_wa, u.id)"
-                class="flex-grow sm:flex-grow-0 !bg-emerald-600 hover:!bg-emerald-700 !border-0 text-white flex items-center justify-center gap-1.5 font-bold shadow-sm"
-                size="sm"
-              >
-                <Icon name="heroicons:chat-bubble-left-right" class="w-3 h-3" />
-                Kirim WA
-              </AppButton>
-              <AppButton
-                @click="handleCopyText(u.id, u.nama_umkm)"
-                class="flex-grow sm:flex-grow-0"
-                variant="secondary"
-                size="sm"
-              >
-                <Icon name="heroicons:clipboard-document" class="w-3 h-3" />
-                Salin
-              </AppButton>
-              <AppButton
-                @click="toggleSent(u.id)"
-                variant="secondary"
-                size="sm"
-                class="flex-grow sm:flex-grow-0"
-              >
-                <Icon name="heroicons:check-circle" class="w-3 h-3" />
-                {{ sentState[u.id] ? 'Batal Terkirim' : 'Tandai Terkirim ✓' }}
-              </AppButton>
-            </div>
+          <!-- Action buttons -->
+          <div class="flex items-center gap-3">
+            <AppButton
+              @click="handleSendWA(u.kontak_wa, u.id)"
+              class="flex-grow sm:flex-grow-0 !bg-emerald-600 hover:!bg-emerald-700 !border-0 text-white flex items-center justify-center gap-1.5 font-bold shadow-sm"
+              size="sm"
+            >
+              <Icon name="heroicons:chat-bubble-left-right" class="w-3 h-3" />
+              Kirim WA
+            </AppButton>
+            <AppButton
+              @click="handleCopyText(u.id, u.nama_umkm)"
+              class="flex-grow sm:flex-grow-0"
+              variant="secondary"
+              size="sm"
+            >
+              <Icon name="heroicons:clipboard-document" class="w-3 h-3" />
+              Salin
+            </AppButton>
+            <AppButton
+              @click="toggleSent(u.id)"
+              variant="secondary"
+              size="sm"
+              class="flex-grow sm:flex-grow-0"
+            >
+              <Icon name="heroicons:check-circle" class="w-3 h-3" />
+              {{ sentState[u.id] ? 'Batal Terkirim' : 'Tandai Terkirim ✓' }}
+            </AppButton>
           </div>
         </div>
-      </template>
-
-    </main>
+      </div>
+    </template>
 
     <!-- Manual Copy Modal Fallback -->
     <AppModal
