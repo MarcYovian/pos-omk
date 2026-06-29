@@ -4,6 +4,7 @@ import { ref, computed } from 'vue'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { ProductCashierView, ProductAdmin } from '~/types/app'
 import { useAuthStore } from '~/stores/auth'
+import { useSessionStore } from '~/stores/session'
 
 export const useProductStore = defineStore('products', () => {
   const products = ref<(ProductCashierView | ProductAdmin)[]>([])
@@ -20,23 +21,61 @@ export const useProductStore = defineStore('products', () => {
 
   const fetchTodayProducts = async () => {
     const supabase = useSupabase()
-    const { todayDate } = useSessionDate()
+    const sessionStore = useSessionStore()
     const authStore = useAuthStore()
+
+    const sessionId = sessionStore.sessionId
+    if (!sessionId) {
+      products.value = []
+      return
+    }
 
     isLoading.value = true
     error.value = null
 
     try {
-      const table = authStore.role === 'admin' ? 'products' : 'products_cashier_view'
-      
-      const { data, error: fetchError } = await supabase
-        .from(table as any)
-        .select('*, umkm(nama_umkm)')
-        .eq('session_date', todayDate.value)
-        .order('nama_produk') as any
+      if (authStore.role === 'admin') {
+        const { data, error: fetchError } = await supabase
+          .from('session_products')
+          .select(`
+            *,
+            master_product:master_products!inner(
+              nama_produk,
+              harga_asli,
+              umkm_id,
+              umkm!inner(nama_umkm)
+            )
+          `)
+          .eq('session_id', sessionId)
 
-      if (fetchError) throw fetchError
-      products.value = data ?? []
+        if (fetchError) throw fetchError
+
+        products.value = (data ?? []).map((sp: any) => ({
+          id: sp.id,
+          session_id: sp.session_id,
+          master_product_id: sp.master_product_id,
+          nama_produk: sp.master_product?.nama_produk ?? '',
+          harga_asli: sp.master_product?.harga_asli ?? 0,
+          harga_jual: sp.harga_jual,
+          stok_awal: sp.stok_awal,
+          stok_sekarang: sp.stok_sekarang,
+          is_active: sp.is_active,
+          umkm_id: sp.master_product?.umkm_id ?? '',
+          created_at: sp.created_at,
+          umkm: sp.master_product?.umkm,
+        }))
+
+        products.value.sort((a, b) => a.nama_produk.localeCompare(b.nama_produk))
+      } else {
+        const { data, error: fetchError } = await supabase
+          .from('products_cashier_view')
+          .select('*, umkm(nama_umkm)')
+          .eq('session_id', sessionId)
+          .order('nama_produk') as any
+
+        if (fetchError) throw fetchError
+        products.value = data ?? []
+      }
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : 'Unknown error'
       throw e
@@ -56,7 +95,7 @@ export const useProductStore = defineStore('products', () => {
     error.value = null
     try {
       const { error: updateError } = await supabase
-        .from('products')
+        .from('session_products')
         .update({ is_active: isActive })
         .eq('id', productId)
 
@@ -74,18 +113,21 @@ export const useProductStore = defineStore('products', () => {
 
   const subscribeRealtime = () => {
     const supabase = useSupabase()
-    const { todayDate } = useSessionDate()
+    const sessionStore = useSessionStore()
     const cartStore = useCartStore()
 
+    const sessionId = sessionStore.sessionId
+    if (!sessionId) return
+
     realtimeChannel = supabase
-      .channel(`products-stock-${todayDate.value}`)
+      .channel(`session-products-${sessionId}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
-        table: 'products',
-        filter: `session_date=eq.${todayDate.value}`,
+        table: 'session_products',
+        filter: `session_id=eq.${sessionId}`,
       }, (payload) => {
-        console.log('[Realtime Product Change] Event:', payload.eventType, 'Payload:', payload)
+        console.log('[Realtime SessionProduct Change] Event:', payload.eventType, 'Payload:', payload)
         
         if (payload.eventType === 'INSERT' || payload.eventType === 'DELETE') {
           fetchTodayProducts()
@@ -97,8 +139,6 @@ export const useProductStore = defineStore('products', () => {
           if (!localProduct) {
             fetchTodayProducts()
           } else if (
-            payload.new.nama_produk !== localProduct.nama_produk ||
-            payload.new.harga_jual !== localProduct.harga_jual ||
             payload.new.is_active !== localProduct.is_active
           ) {
             fetchTodayProducts()
@@ -135,12 +175,33 @@ export const useProductStore = defineStore('products', () => {
     isLoading.value = true
     error.value = null
     try {
+      const product = products.value.find(p => p.id === productId) as ProductAdmin | undefined
+      if (!product) throw new Error('Product not found')
+
+      const masterProductId = product.master_product_id
+      if (!masterProductId) throw new Error('Master product ID not found')
+
       const { error: updateError } = await supabase
-        .from('products')
-        .update(updates)
+        .from('session_products')
+        .update({
+          harga_jual: updates.harga_jual,
+          stok_awal: updates.stok_awal,
+          stok_sekarang: updates.stok_sekarang,
+        })
         .eq('id', productId)
 
       if (updateError) throw updateError
+
+      const { error: masterUpdateError } = await supabase
+        .from('master_products')
+        .update({
+          nama_produk: updates.nama_produk,
+          harga_asli: updates.harga_asli,
+        })
+        .eq('id', masterProductId)
+
+      if (masterUpdateError) throw masterUpdateError
+
       await fetchTodayProducts()
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : 'Unknown error'
@@ -156,7 +217,7 @@ export const useProductStore = defineStore('products', () => {
     error.value = null
     try {
       const { error: deleteError } = await supabase
-        .from('products')
+        .from('session_products')
         .delete()
         .eq('id', productId)
 

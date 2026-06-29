@@ -2,7 +2,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { CartItem } from '~/types/pos'
-import type { ProductCashierView } from '~/types/app'
+import type { ProductCashierView, ProductAdmin } from '~/types/app'
 import { useOfflineQueue } from '~/composables/useOfflineQueue'
 import { useNetworkStatus } from '~/composables/useNetworkStatus'
 import { useSessionStore } from '~/stores/session'
@@ -26,7 +26,7 @@ export const useCartStore = defineStore('cart', () => {
     items.value.some(item => item.hasStockWarning)
   )
 
-  const addItem = (product: ProductCashierView) => {
+  const addItem = (product: ProductCashierView | ProductAdmin) => {
     const existing = items.value.find(item => item.product_id === product.id)
     if (existing) {
       if (existing.qty + 1 > product.stok_sekarang) {

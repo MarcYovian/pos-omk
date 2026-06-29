@@ -1,6 +1,6 @@
 <!-- pages/admin/reconciliation.vue -->
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, toRef } from 'vue'
 import { useSessionStore } from '~/stores/session'
 import { useProductStore } from '~/stores/products'
 import { useToast } from '~/composables/useToast'
@@ -21,7 +21,7 @@ const productStore = useProductStore()
 const authStore = useAuthStore()
 const { addToast } = useToast()
 
-const physicalCounts = ref<Record<string, number | ''>>({})
+const physicalCounts = ref<Record<string, number | '' | undefined>>({})
 const isSubmitting = ref(false)
 const showCloseConfirm = ref(false)
 const showMatchAllConfirm = ref(false)
@@ -59,10 +59,10 @@ const loadData = async () => {
       const supabase = useSupabase()
       const { data } = await supabase
         .from('reconciliation')
-        .select('product_id, stok_fisik')
-        .eq('session_id', sessionStore.sessionId)
+        .select('session_product_id, stok_fisik')
+        .eq('session_id', sessionStore.sessionId!)
 
-      const reconMap = new Map(data?.map(r => [r.product_id, r.stok_fisik]) || [])
+      const reconMap = new Map(data?.map(r => [r.session_product_id, r.stok_fisik]) || [])
 
       productStore.products.forEach(p => {
         if (reconMap.has(p.id)) {
@@ -84,7 +84,7 @@ onMounted(() => {
 const itemsFilledCount = computed(() => {
   return productStore.products.filter(p => {
     const val = physicalCounts.value[p.id]
-    return val !== '' && val !== null && val >= 0
+    return val !== '' && val !== null && val !== undefined && val >= 0
   }).length
 })
 
@@ -94,11 +94,16 @@ const isAllFilled = computed(() => {
 
 const getSelisih = (productId: string, systemStock: number) => {
   const phys = physicalCounts.value[productId]
-  if (phys === '' || phys === null) return null
+  if (phys === '' || phys === null || phys === undefined) return null
   return Number(phys) - systemStock
 }
 
-// Quick action to copy system stock for a single product
+const physicalCountProxy = (productId: string) =>
+  computed({
+    get: () => physicalCounts.value[productId] ?? '',
+    set: (val: string | number) => { physicalCounts.value[productId] = val === '' ? '' : Number(val) }
+  })
+
 const copySystemStock = (productId: string, systemStock: number) => {
   if (sessionStore.isClosed) return
   physicalCounts.value[productId] = systemStock
@@ -137,7 +142,7 @@ const handleConfirmClose = async () => {
       const phys = Number(physicalCounts.value[p.id])
       return {
         session_id: sessionStore.sessionId!,
-        product_id: p.id,
+        session_product_id: p.id,
         stok_fisik: phys,
         stok_sekarang_snap: p.stok_sekarang,
         recorded_by: authStore.user!.id
@@ -146,7 +151,7 @@ const handleConfirmClose = async () => {
 
     const { error: reconError } = await supabase
       .from('reconciliation')
-      .upsert(insertPayload, { onConflict: 'session_id,product_id' })
+      .upsert(insertPayload, { onConflict: 'session_id,session_product_id' })
 
     if (reconError) throw reconError
 
@@ -294,7 +299,8 @@ const handleConfirmClose = async () => {
             <span class="text-xs text-slate-500 font-medium">Stok Fisik:</span>
             <div class="w-24 relative">
               <AppInput
-                v-model="physicalCounts[p.id]"
+                :model-value="physicalCounts[p.id] ?? ''"
+                @update:model-value="(v: string | number) => { physicalCounts[p.id] = v === '' ? '' : Number(v) }"
                 type="number"
                 placeholder="Fisik"
                 input-mode="numeric"

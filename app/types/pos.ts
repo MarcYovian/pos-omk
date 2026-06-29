@@ -1,7 +1,7 @@
 // types/pos.ts — POS-specific types
 
 export interface CartItem {
-  product_id:        string
+  product_id:        string      // session_product_id (key name matches RPC JSON payload)
   nama_produk:       string
   harga_jual:        number
   qty:               number

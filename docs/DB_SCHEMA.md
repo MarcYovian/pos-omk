@@ -1,7 +1,8 @@
 # DB_SCHEMA.md — Database Schema Reference
+
 # OMK Consignment POS — Supabase (PostgreSQL)
 
-> **Document Status:** Ground-Truth v1.1 — Authoritative source for AI Coding Agent  
+> **Document Status:** Ground-Truth v2.0 — Authoritative source for AI Coding Agent  
 > **Database:** Supabase (PostgreSQL 15+)  
 > **Critical Rule:** Column names and types defined here are the single source of truth. Do not rename, retype, or add columns without updating this file first.
 
@@ -19,11 +20,12 @@
    - [transaction_details](#35-table-transaction_details)
    - [reconciliation](#36-table-reconciliation)
 4. [Database Functions (RPC)](#4-database-functions-rpc)
-5. [Row-Level Security (RLS) Policies](#5-row-level-security-rls-policies)
-6. [Indexes](#6-indexes)
-7. [Realtime Configuration](#7-realtime-configuration)
-8. [Seed Data & Initial Setup](#8-seed-data--initial-setup)
-9. [Migration Notes](#9-migration-notes)
+5. [Views](#5-views)
+6. [Row-Level Security (RLS) Policies](#6-row-level-security-rls-policies)
+7. [Indexes](#7-indexes)
+8. [Realtime Configuration](#8-realtime-configuration)
+9. [Seed Data & Initial Setup](#9-seed-data--initial-setup)
+10. [Migration Notes](#10-migration-notes)
 
 ---
 
@@ -34,15 +36,22 @@ Schema: public (default Supabase schema)
 Auth: supabase.auth.users (managed by Supabase Auth)
 
 Tables:
-  umkm                — UMKM partner directory (7 records max)
+  umkm                — UMKM partner directory
   products            — Weekly dynamic product catalog (scoped by session_date)
   sessions            — One record per Sunday sales session
   transactions        — One record per completed checkout
   transaction_details — Line items within each transaction (immutable after insert)
   reconciliation      — End-of-day physical stock count results
+
+Views:
+  products_cashier_view     — Cashier-safe view hiding harga_asli from non-admin roles
+  session_history_summary   — Aggregated financial summary per session (used by RPCs)
+  top_products_sales        — Top-selling products with sell-through rate across closed sessions
+  umkm_profit_contribution  — OMK net profit breakdown by UMKM across closed sessions
 ```
 
 **Design Principles:**
+
 1. **Price immutability:** `transaction_details` stores price snapshots at time of sale. Changing `products.harga_jual` later never corrupts historical revenue data.
 2. **Session scoping:** All operational data is anchored to `session_date` (products) or `session_id` (transactions). Cross-session queries always require an explicit filter.
 3. **Soft operations:** No hard deletes on any table. Use `is_active = false` flags or `status` columns.
@@ -175,6 +184,7 @@ COMMENT ON COLUMN public.products.is_active IS 'Admin can toggle mid-session (e.
 | `created_at` | `timestamptz` | NOT NULL | `NOW()` | Auto-set |
 
 **Trigger — Auto-initialize `stok_sekarang`:**
+
 ```sql
 CREATE OR REPLACE FUNCTION public.set_stok_sekarang()
 RETURNS TRIGGER AS $$
@@ -243,7 +253,7 @@ CREATE TABLE public.transactions (
   nominal_diterima    INTEGER       NOT NULL CHECK (nominal_diterima >= total_harga_jual),
   kembalian           INTEGER       NOT NULL GENERATED ALWAYS AS
                         (nominal_diterima - total_harga_jual) STORED,
-  metode_pembayaran   VARCHAR(20)   NOT NULL DEFAULT 'cash' CHECK (metode_pembayaran IN ('cash', 'qris')),
+  metode_pembayaran   VARCHAR(20)   DEFAULT 'cash' CHECK (metode_pembayaran IN ('cash', 'qris')),
   created_at          TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
@@ -265,6 +275,7 @@ COMMENT ON COLUMN public.transactions.metode_pembayaran IS 'Payment method: cash
 | `total_harga_jual` | `integer` | NOT NULL | — | > 0, sum of line items |
 | `nominal_diterima` | `integer` | NOT NULL | — | >= `total_harga_jual` |
 | `kembalian` | `integer` | NOT NULL | Computed | `nominal_diterima - total_harga_jual` |
+| `metode_pembayaran` | `varchar(20)` | NULL | `'cash'` | Payment method: 'cash' or 'qris' |
 | `created_at` | `timestamptz` | NOT NULL | `NOW()` | Auto-set, used for session filtering |
 
 ---
@@ -348,7 +359,7 @@ COMMENT ON COLUMN public.reconciliation.selisih IS 'Discrepancy: stok_fisik - st
 | `selisih` | `integer` | NOT NULL | Computed | `stok_fisik - stok_sekarang_snap` |
 | `recorded_by` | `uuid` | NOT NULL | — | FK → `auth.users.id` (admin) |
 | `created_at` | `timestamptz` | NOT NULL | `NOW()` | Auto-set |
-| *(unique)* | — | — | — | UNIQUE (`session_id`, `product_id`) |
+| _(unique)_ | — | — | — | UNIQUE (`session_id`, `product_id`) |
 
 ---
 
@@ -358,18 +369,108 @@ These PostgreSQL functions are called via `supabase.rpc('function_name', params)
 
 ---
 
-### 4.1 `complete_transaction`
+### 4.1 `complete_transaction` (overloaded — 2 signatures)
 
 **Purpose:** Atomically insert a transaction + all line items + decrement stock for all products in a cart.
 
 **Called by:** Cashier checkout flow. This is the **only** way to create transaction records.
+
+The database has two overloaded versions — the second adds `metode_pembayaran` support:
+
+**Version A — Legacy (4 params, no payment method):**
 
 ```sql
 CREATE OR REPLACE FUNCTION public.complete_transaction(
   p_session_id        UUID,
   p_cashier_id        UUID,
   p_nominal_diterima  INTEGER,
-  p_cart_items        JSONB,   -- Array of {product_id, qty, harga_jual, harga_asli}
+  p_cart_items        JSONB        -- Array of {product_id, qty, harga_jual, harga_asli}
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_transaction_id    UUID;
+  v_total_harga_jual  INTEGER := 0;
+  v_item              JSONB;
+  v_product_id        UUID;
+  v_qty               INTEGER;
+  v_harga_jual        INTEGER;
+  v_harga_asli        INTEGER;
+  v_stok_sekarang     INTEGER;
+  v_session_status    VARCHAR(20);
+BEGIN
+  SELECT status INTO v_session_status FROM public.sessions WHERE id = p_session_id;
+
+  IF v_session_status IS NULL THEN
+    RAISE EXCEPTION 'Session not found: %', p_session_id;
+  END IF;
+  IF v_session_status != 'open' THEN
+    RAISE EXCEPTION 'Session is closed. No transactions allowed.';
+  END IF;
+
+  FOR v_item IN SELECT * FROM jsonb_array_elements(p_cart_items) LOOP
+    v_product_id := (v_item->>'product_id')::UUID;
+    v_qty        := (v_item->>'qty')::INTEGER;
+    v_harga_jual := (v_item->>'harga_jual')::INTEGER;
+    IF v_qty <= 0 THEN
+      RAISE EXCEPTION 'Invalid qty for product %', v_product_id;
+    END IF;
+    v_total_harga_jual := v_total_harga_jual + (v_qty * v_harga_jual);
+  END LOOP;
+
+  IF p_nominal_diterima < v_total_harga_jual THEN
+    RAISE EXCEPTION 'nominal_diterima (%) is less than total (%).',
+      p_nominal_diterima, v_total_harga_jual;
+  END IF;
+
+  INSERT INTO public.transactions (session_id, cashier_id, total_harga_jual, nominal_diterima)
+  VALUES (p_session_id, p_cashier_id, v_total_harga_jual, p_nominal_diterima)
+  RETURNING id INTO v_transaction_id;
+
+  FOR v_item IN SELECT * FROM jsonb_array_elements(p_cart_items) LOOP
+    v_product_id := (v_item->>'product_id')::UUID;
+    v_qty        := (v_item->>'qty')::INTEGER;
+    v_harga_jual := (v_item->>'harga_jual')::INTEGER;
+    v_harga_asli := (v_item->>'harga_asli')::INTEGER;
+
+    SELECT stok_sekarang INTO v_stok_sekarang
+    FROM public.products WHERE id = v_product_id AND is_active = TRUE FOR UPDATE;
+
+    IF v_stok_sekarang IS NULL THEN
+      RAISE EXCEPTION 'Product % not found or inactive', v_product_id;
+    END IF;
+    IF v_stok_sekarang < v_qty THEN
+      RAISE EXCEPTION 'Insufficient stock for product %. Available: %, Requested: %',
+        v_product_id, v_stok_sekarang, v_qty;
+    END IF;
+
+    UPDATE public.products SET stok_sekarang = stok_sekarang - v_qty WHERE id = v_product_id;
+
+    INSERT INTO public.transaction_details (transaction_id, product_id, qty, harga_jual_snapshot, harga_asli_snapshot)
+    SELECT v_transaction_id, v_product_id, v_qty, p.harga_jual, p.harga_asli
+    FROM public.products p WHERE p.id = v_product_id;
+  END LOOP;
+
+  RETURN jsonb_build_object(
+    'transaction_id',   v_transaction_id,
+    'total_harga_jual', v_total_harga_jual,
+    'kembalian',        p_nominal_diterima - v_total_harga_jual
+  );
+EXCEPTION WHEN OTHERS THEN RAISE;
+END;
+$$;
+```
+
+**Version B — With payment method (5 params, recommended):**
+
+```sql
+CREATE OR REPLACE FUNCTION public.complete_transaction(
+  p_session_id        UUID,
+  p_cashier_id        UUID,
+  p_nominal_diterima  INTEGER,
+  p_cart_items        JSONB,         -- Array of {product_id, qty, harga_jual, harga_asli}
   p_metode_pembayaran VARCHAR DEFAULT 'cash'
 )
 RETURNS JSONB
@@ -387,96 +488,64 @@ DECLARE
   v_stok_sekarang     INTEGER;
   v_session_status    VARCHAR(20);
 BEGIN
-  -- 1. Validate session is open
-  SELECT status INTO v_session_status
-  FROM public.sessions
-  WHERE id = p_session_id;
-
+  SELECT status INTO v_session_status FROM public.sessions WHERE id = p_session_id;
   IF v_session_status IS NULL THEN
     RAISE EXCEPTION 'Session not found: %', p_session_id;
   END IF;
-
   IF v_session_status != 'open' THEN
     RAISE EXCEPTION 'Session is closed. No transactions allowed.';
   END IF;
 
-  -- 2. Calculate total and validate cart
-  FOR v_item IN SELECT * FROM jsonb_array_elements(p_cart_items)
-  LOOP
+  FOR v_item IN SELECT * FROM jsonb_array_elements(p_cart_items) LOOP
     v_product_id := (v_item->>'product_id')::UUID;
     v_qty        := (v_item->>'qty')::INTEGER;
     v_harga_jual := (v_item->>'harga_jual')::INTEGER;
-
     IF v_qty <= 0 THEN
       RAISE EXCEPTION 'Invalid qty for product %', v_product_id;
     END IF;
-
     v_total_harga_jual := v_total_harga_jual + (v_qty * v_harga_jual);
   END LOOP;
 
-  -- 3. Validate nominal_diterima
   IF p_nominal_diterima < v_total_harga_jual THEN
     RAISE EXCEPTION 'nominal_diterima (%) is less than total (%).',
       p_nominal_diterima, v_total_harga_jual;
   END IF;
 
-  -- 4. Insert transaction header with payment method
   INSERT INTO public.transactions (session_id, cashier_id, total_harga_jual, nominal_diterima, metode_pembayaran)
   VALUES (p_session_id, p_cashier_id, v_total_harga_jual, p_nominal_diterima, p_metode_pembayaran)
   RETURNING id INTO v_transaction_id;
 
-  -- 5. For each cart item: lock product row, check stock, decrement, insert detail
-  FOR v_item IN SELECT * FROM jsonb_array_elements(p_cart_items)
-  LOOP
+  FOR v_item IN SELECT * FROM jsonb_array_elements(p_cart_items) LOOP
     v_product_id := (v_item->>'product_id')::UUID;
     v_qty        := (v_item->>'qty')::INTEGER;
     v_harga_jual := (v_item->>'harga_jual')::INTEGER;
-    v_harga_asli := (v_item->>'harga_asli')::INTEGER;  -- Fetched server-side for security
+    v_harga_asli := (v_item->>'harga_asli')::INTEGER;
 
-    -- Lock row to prevent race conditions
     SELECT stok_sekarang INTO v_stok_sekarang
-    FROM public.products
-    WHERE id = v_product_id AND is_active = TRUE
-    FOR UPDATE;
+    FROM public.products WHERE id = v_product_id AND is_active = TRUE FOR UPDATE;
 
     IF v_stok_sekarang IS NULL THEN
       RAISE EXCEPTION 'Product % not found or inactive', v_product_id;
     END IF;
-
     IF v_stok_sekarang < v_qty THEN
       RAISE EXCEPTION 'Insufficient stock for product %. Available: %, Requested: %',
         v_product_id, v_stok_sekarang, v_qty;
     END IF;
 
-    -- Decrement stock
-    UPDATE public.products
-    SET stok_sekarang = stok_sekarang - v_qty
-    WHERE id = v_product_id;
+    UPDATE public.products SET stok_sekarang = stok_sekarang - v_qty WHERE id = v_product_id;
 
-    -- Insert line item with price snapshot from DB (not from client)
-    INSERT INTO public.transaction_details (
-      transaction_id, product_id, qty, harga_jual_snapshot, harga_asli_snapshot
-    )
-    SELECT
-      v_transaction_id,
-      v_product_id,
-      v_qty,
-      p.harga_jual,    -- Always read from DB, never trust client-sent price
-      p.harga_asli     -- Always read from DB (hidden from cashier via RLS)
-    FROM public.products p
-    WHERE p.id = v_product_id;
+    INSERT INTO public.transaction_details (transaction_id, product_id, qty, harga_jual_snapshot, harga_asli_snapshot)
+    SELECT v_transaction_id, v_product_id, v_qty, p.harga_jual, p.harga_asli
+    FROM public.products p WHERE p.id = v_product_id;
   END LOOP;
 
-  -- 6. Return result
   RETURN jsonb_build_object(
     'transaction_id',   v_transaction_id,
     'total_harga_jual', v_total_harga_jual,
-    'kembalian',        p_nominal_diterima - v_total_harga_jual
+    'kembalian',        p_nominal_diterima - v_total_harga_jual,
+    'metode_pembayaran', p_metode_pembayaran
   );
-
-EXCEPTION
-  WHEN OTHERS THEN
-    RAISE;  -- Re-raise; Supabase client receives the error message
+EXCEPTION WHEN OTHERS THEN RAISE;
 END;
 $$;
 
@@ -556,7 +625,26 @@ SECURITY DEFINER
 AS $$
 DECLARE
   v_is_authorized BOOLEAN;
-...
+BEGIN
+  SELECT COALESCE(
+    (auth.jwt() -> 'user_metadata' ->> 'can_reopen_session')::BOOLEAN, FALSE
+  ) INTO v_is_authorized;
+
+  IF NOT v_is_authorized THEN
+    RAISE EXCEPTION 'Unauthorized: User does not have can_reopen_session permission.';
+  END IF;
+
+  UPDATE public.sessions
+  SET status = 'open', closed_by = NULL, closed_at = NULL
+  WHERE id = p_session_id AND status = 'closed';
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Session % not found or not in closed state.', p_session_id;
+  END IF;
+
+  RETURN jsonb_build_object('session_id', p_session_id, 'status', 'open');
+END;
+$$;
 ```
 
 ---
@@ -574,14 +662,41 @@ RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
-...
+DECLARE
+  v_caller_email TEXT;
+BEGIN
+  SELECT email INTO v_caller_email FROM auth.users WHERE id = auth.uid();
+
+  IF v_caller_email IS NULL OR v_caller_email != 'marcellinusyovian@gmail.com' THEN
+    RAISE EXCEPTION 'Access Denied: Only marcellinusyovian@gmail.com is allowed to reset the session.';
+  END IF;
+
+  DELETE FROM public.transaction_details
+  WHERE transaction_id IN (SELECT id FROM public.transactions WHERE session_id = p_session_id);
+
+  DELETE FROM public.transactions WHERE session_id = p_session_id;
+
+  DELETE FROM public.reconciliation WHERE session_id = p_session_id;
+
+  UPDATE public.products p
+  SET stok_sekarang = stok_awal
+  FROM public.sessions s
+  WHERE s.session_date = p.session_date AND s.id = p_session_id;
+
+  UPDATE public.sessions
+  SET status = 'open', closed_by = NULL, closed_at = NULL
+  WHERE id = p_session_id;
+
+  RETURN jsonb_build_object('session_id', p_session_id, 'status', 'open', 'reset', true);
+END;
+$$;
 ```
 
 ---
 
 ### 4.5 `get_session_financial_summary`
 
-**Purpose:** Efficient aggregation query for the admin revenue split dashboard.
+**Purpose:** Returns aggregated financial breakdown (overall + per-UMKM) for the admin revenue split dashboard.
 
 ```sql
 CREATE OR REPLACE FUNCTION public.get_session_financial_summary(
@@ -592,32 +707,110 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  v_result JSONB;
+  v_totals JSONB;
+  v_per_umkm JSONB;
 BEGIN
   SELECT jsonb_build_object(
-    'session_id',          p_session_id,
-    'gross_revenue',       COALESCE(SUM(td.subtotal_harga_jual), 0),
-    'total_remittance',    COALESCE(SUM(td.subtotal_harga_asli), 0),
-    'omk_net_profit',      COALESCE(SUM(td.subtotal_harga_jual - td.subtotal_harga_asli), 0),
-    'transaction_count',   COUNT(DISTINCT t.id),
-    'per_umkm',            jsonb_agg(
-      jsonb_build_object(
-        'umkm_id',         u.id,
-        'nama_umkm',       u.nama_umkm,
-        'items_sold',      COALESCE(SUM(td.qty), 0),
-        'gross_sales',     COALESCE(SUM(td.subtotal_harga_jual), 0),
-        'remittance_due',  COALESCE(SUM(td.subtotal_harga_asli), 0),
-        'omk_profit',      COALESCE(SUM(td.subtotal_harga_jual - td.subtotal_harga_asli), 0)
-      )
-    )
+    'session_id',        p_session_id,
+    'gross_revenue',     COALESCE(SUM(td.subtotal_harga_jual), 0),
+    'total_remittance',  COALESCE(SUM(td.subtotal_harga_asli), 0),
+    'omk_net_profit',    COALESCE(SUM(td.subtotal_harga_jual - td.subtotal_harga_asli), 0),
+    'transaction_count', COUNT(DISTINCT t.id)
   )
-  INTO v_result
+  INTO v_totals
   FROM public.transactions t
   JOIN public.transaction_details td ON td.transaction_id = t.id
-  JOIN public.products p ON p.id = td.product_id
-  JOIN public.umkm u ON u.id = p.umkm_id
-  WHERE t.session_id = p_session_id
-  GROUP BY u.id, u.nama_umkm;
+  WHERE t.session_id = p_session_id;
+
+  SELECT COALESCE(
+    jsonb_agg(
+      jsonb_build_object(
+        'umkm_id',        agg.umkm_id,
+        'nama_umkm',      agg.nama_umkm,
+        'items_sold',     agg.items_sold,
+        'gross_sales',    agg.gross_sales,
+        'remittance_due', agg.remittance_due,
+        'omk_profit',     agg.omk_profit
+      ) ORDER BY agg.nama_umkm
+    ), '[]'::jsonb
+  )
+  INTO v_per_umkm
+  FROM (
+    SELECT
+      u.id              AS umkm_id,
+      u.nama_umkm,
+      COALESCE(SUM(td.qty), 0)                                        AS items_sold,
+      COALESCE(SUM(td.subtotal_harga_jual), 0)                        AS gross_sales,
+      COALESCE(SUM(td.subtotal_harga_asli), 0)                        AS remittance_due,
+      COALESCE(SUM(td.subtotal_harga_jual - td.subtotal_harga_asli), 0) AS omk_profit
+    FROM public.transactions t
+    JOIN public.transaction_details td ON td.transaction_id = t.id
+    JOIN public.products p ON p.id = td.product_id
+    JOIN public.umkm u ON u.id = p.umkm_id
+    WHERE t.session_id = p_session_id
+    GROUP BY u.id, u.nama_umkm
+  ) agg;
+
+  IF v_totals IS NULL THEN
+    RETURN jsonb_build_object(
+      'session_id', p_session_id, 'gross_revenue', 0, 'total_remittance', 0,
+      'omk_net_profit', 0, 'transaction_count', 0, 'per_umkm', '[]'::jsonb
+    );
+  END IF;
+
+  RETURN v_totals || jsonb_build_object('per_umkm', v_per_umkm);
+END;
+$$;
+```
+
+---
+
+### 4.6 `get_umkm_product_breakdown`
+
+**Purpose:** Per-product breakdown (stock, sold qty, revenue, cost, profit) for a specific UMKM in a specific session.
+
+```sql
+CREATE OR REPLACE FUNCTION public.get_umkm_product_breakdown(
+  p_session_id UUID,
+  p_umkm_id    UUID
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_result JSONB;
+  v_session_date date;
+BEGIN
+  SELECT session_date INTO v_session_date FROM public.sessions WHERE id = p_session_id;
+  IF v_session_date IS NULL THEN RETURN '[]'::jsonb; END IF;
+
+  SELECT COALESCE(
+    jsonb_agg(
+      jsonb_build_object(
+        'nama_produk',   p.nama_produk,
+        'stok_awal',     p.stok_awal,
+        'stok_sekarang', p.stok_sekarang,
+        'sold',          COALESCE(s.qty_sold, 0),
+        'revenue',       COALESCE(s.rev, 0),
+        'cost',          COALESCE(s.cost, 0),
+        'profit',        COALESCE(s.rev - s.cost, 0)
+      ) ORDER BY p.nama_produk
+    ), '[]'::jsonb
+  )
+  INTO v_result
+  FROM public.products p
+  LEFT JOIN (
+    SELECT td.product_id,
+           SUM(td.qty)                  AS qty_sold,
+           SUM(td.subtotal_harga_jual)  AS rev,
+           SUM(td.subtotal_harga_asli)  AS cost
+    FROM public.transaction_details td
+    JOIN public.transactions t ON t.id = td.transaction_id
+    WHERE t.session_id = p_session_id
+    GROUP BY td.product_id
+  ) s ON s.product_id = p.id
+  WHERE p.umkm_id = p_umkm_id AND p.session_date = v_session_date;
 
   RETURN v_result;
 END;
@@ -626,23 +819,243 @@ $$;
 
 ---
 
-## 5. Row-Level Security (RLS) Policies
+### 4.7 `get_weekly_trends`
 
-Enable RLS on all tables before applying policies.
+**Purpose:** Returns last N closed sessions' financial data for weekly trend charts. Uses the `session_history_summary` view.
 
 ```sql
-ALTER TABLE public.umkm               ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.products            ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.sessions            ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.transactions        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.transaction_details ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.reconciliation      ENABLE ROW LEVEL SECURITY;
+CREATE OR REPLACE FUNCTION public.get_weekly_trends(p_limit INTEGER DEFAULT 10)
+RETURNS TABLE(session_id UUID, session_date DATE, gross_revenue BIGINT, total_remittance BIGINT, omk_net_profit BIGINT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT shs.session_id, shs.session_date,
+         shs.gross_revenue::BIGINT, shs.total_remittance::BIGINT, shs.omk_net_profit::BIGINT
+  FROM public.session_history_summary shs
+  WHERE shs.status = 'closed'
+  ORDER BY shs.session_date DESC
+  LIMIT p_limit;
+END;
+$$;
 ```
 
-### Helper Function
+---
+
+### 4.8 `get_product_stock_recommendation`
+
+**Purpose:** Calculate a Weighted Moving Average stock recommendation for a product based on the last 3 closed sessions' sales. Uses WMA weights: 50% (S1, most recent), 30% (S2), 20% (S3).
 
 ```sql
--- Retrieve the current user's role from auth.users metadata
+CREATE OR REPLACE FUNCTION public.get_product_stock_recommendation(
+  p_umkm_id     UUID,
+  p_nama_produk VARCHAR
+)
+RETURNS TABLE(recommendation INTEGER, s1_sold INTEGER, s2_sold INTEGER, s3_sold INTEGER)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_s1 INTEGER := 0; v_s2 INTEGER := 0; v_s3 INTEGER := 0;
+  v_rec INTEGER; r RECORD; idx INTEGER := 1;
+BEGIN
+  FOR r IN (
+    SELECT COALESCE(SUM(td.qty), 0)::INTEGER AS total_sold
+    FROM public.sessions s
+    JOIN public.products p ON p.session_date = s.session_date
+    LEFT JOIN public.transaction_details td ON td.product_id = p.id
+    WHERE s.status = 'closed'
+      AND p.umkm_id = p_umkm_id
+      AND p.nama_produk = p_nama_produk
+    GROUP BY s.id, s.session_date
+    ORDER BY s.session_date DESC LIMIT 3
+  ) LOOP
+    IF idx = 1 THEN v_s1 := r.total_sold;
+    ELSIF idx = 2 THEN v_s2 := r.total_sold;
+    ELSIF idx = 3 THEN v_s3 := r.total_sold; END IF;
+    idx := idx + 1;
+  END LOOP;
+
+  IF idx = 1 THEN RETURN; END IF;
+
+  v_rec := CEIL((0.5 * v_s1) + (0.3 * v_s2) + (0.2 * v_s3));
+  RETURN QUERY SELECT v_rec, v_s1, v_s2, v_s3;
+END;
+$$;
+```
+
+---
+
+### 4.9 Admin User Management RPCs
+
+These functions manage `auth.users` and `auth.identities` directly. All are `SECURITY DEFINER` to bypass RLS on auth schema.
+
+#### 4.9.1 `admin_create_user`
+
+**Purpose:** Creates a new user in `auth.users` + `auth.identities` with the given role. Used by the admin dashboard user management page.
+
+```sql
+CREATE OR REPLACE FUNCTION public.admin_create_user(
+  p_email    TEXT,
+  p_password TEXT,
+  p_role     TEXT
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_user_id UUID;
+  v_encrypted_password TEXT;
+BEGIN
+  IF public.get_user_role() != 'admin' THEN
+    RAISE EXCEPTION 'Access Denied: Admin role required.';
+  END IF;
+
+  v_user_id := gen_random_uuid();
+  v_encrypted_password := crypt(p_password, gen_salt('bf'));
+
+  INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+    raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+    confirmation_token, recovery_token, email_change_token_new, email_change,
+    phone_change, phone_change_token, reauthentication_token, email_change_token_current)
+  VALUES (v_user_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+    p_email, v_encrypted_password, now(),
+    '{"provider": "email", "providers": ["email"]}',
+    jsonb_build_object('role', p_role, 'email', p_email, 'email_verified', true, 'phone_verified', false, 'is_active', true),
+    now(), now(), '', '', '', '', '', '', '', '');
+
+  INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
+  VALUES (v_user_id, v_user_id,
+    jsonb_build_object('sub', v_user_id, 'email', p_email, 'email_verified', true, 'phone_verified', false),
+    'email', v_user_id::text, now(), now(), now());
+
+  RETURN v_user_id;
+END;
+$$;
+```
+
+#### 4.9.2 `admin_update_user`
+
+**Purpose:** Update user email, password, and/or role.
+
+```sql
+CREATE OR REPLACE FUNCTION public.admin_update_user(
+  p_user_id  UUID,
+  p_email    TEXT,
+  p_password TEXT,
+  p_role     TEXT
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF public.get_user_role() != 'admin' THEN
+    RAISE EXCEPTION 'Access Denied: Admin role required.';
+  END IF;
+
+  UPDATE auth.users
+  SET email = COALESCE(p_email, email),
+      raw_user_meta_data = raw_user_meta_data || jsonb_build_object('role', p_role, 'email', p_email),
+      encrypted_password = CASE WHEN p_password IS NOT NULL AND p_password != ''
+        THEN crypt(p_password, gen_salt('bf')) ELSE encrypted_password END,
+      updated_at = now()
+  WHERE id = p_user_id;
+
+  UPDATE auth.identities
+  SET identity_data = identity_data || jsonb_build_object('email', p_email),
+      updated_at = now()
+  WHERE user_id = p_user_id;
+END;
+$$;
+```
+
+#### 4.9.3 `admin_delete_user`
+
+**Purpose:** Permanently remove a user from auth system.
+
+```sql
+CREATE OR REPLACE FUNCTION public.admin_delete_user(p_user_id UUID)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF public.get_user_role() != 'admin' THEN
+    RAISE EXCEPTION 'Access Denied: Admin role required.';
+  END IF;
+  DELETE FROM auth.identities WHERE user_id = p_user_id;
+  DELETE FROM auth.users WHERE id = p_user_id;
+END;
+$$;
+```
+
+#### 4.9.4 `admin_toggle_user_active`
+
+**Purpose:** Activate or deactivate a user. Restricted to `marcellinusyovian@gmail.com` only. Cannot self-deactivate.
+
+```sql
+CREATE OR REPLACE FUNCTION public.admin_toggle_user_active(
+  p_user_id   UUID,
+  p_is_active BOOLEAN
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_caller_email TEXT; v_target_email TEXT;
+BEGIN
+  SELECT email INTO v_caller_email FROM auth.users WHERE id = auth.uid();
+  IF v_caller_email IS NULL OR v_caller_email != 'marcellinusyovian@gmail.com' THEN
+    RAISE EXCEPTION 'Access Denied: Only marcellinusyovian@gmail.com is allowed to activate or deactivate users.';
+  END IF;
+
+  SELECT email INTO v_target_email FROM auth.users WHERE id = p_user_id;
+  IF v_target_email = 'marcellinusyovian@gmail.com' THEN
+    RAISE EXCEPTION 'Access Denied: You cannot modify the status of marcellinusyovian@gmail.com.';
+  END IF;
+
+  UPDATE auth.users
+  SET raw_user_meta_data = raw_user_meta_data || jsonb_build_object('is_active', p_is_active),
+      updated_at = now()
+  WHERE id = p_user_id;
+END;
+$$;
+```
+
+#### 4.9.5 `get_all_users`
+
+**Purpose:** List all auth users with role and active status for the admin user management dashboard.
+
+```sql
+CREATE OR REPLACE FUNCTION public.get_all_users()
+RETURNS TABLE(id UUID, email VARCHAR, role TEXT, is_active BOOLEAN, created_at TIMESTAMPTZ, last_sign_in_at TIMESTAMPTZ, email_confirmed_at TIMESTAMPTZ)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF public.get_user_role() != 'admin' THEN
+    RAISE EXCEPTION 'Access Denied: Admin role required.';
+  END IF;
+
+  RETURN QUERY
+  SELECT u.id, u.email::varchar(255),
+         (u.raw_user_meta_data->>'role')::text,
+         COALESCE((u.raw_user_meta_data->>'is_active')::boolean, true) AS is_active,
+         u.created_at, u.last_sign_in_at, u.email_confirmed_at
+  FROM auth.users u;
+END;
+$$;
+```
+
+---
+
+### 4.10 `get_user_role` (helper function)
+
+```sql
 CREATE OR REPLACE FUNCTION public.get_user_role()
 RETURNS TEXT
 LANGUAGE sql
@@ -655,45 +1068,143 @@ AS $$
 $$;
 ```
 
-### 5.1 RLS on `umkm`
+---
+
+### 4.11 `set_stok_sekarang` (trigger function)
 
 ```sql
--- Both roles can read UMKM names (needed for POS product labels)
+CREATE OR REPLACE FUNCTION public.set_stok_sekarang()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.stok_sekarang := NEW.stok_awal;
+  RETURN NEW;
+END;
+$$;
+```
+
+---
+
+## 5. Views
+
+### 5.1 `products_cashier_view`
+
+Hides `harga_asli` (base cost) from cashier role. Cashier queries this view instead of the `products` table.
+
+```sql
+CREATE VIEW public.products_cashier_view AS
+  SELECT id, umkm_id, session_date, nama_produk, harga_jual,
+         stok_awal, stok_sekarang, is_active, created_at
+  FROM public.products;
+
+GRANT SELECT ON public.products_cashier_view TO authenticated;
+```
+
+### 5.2 `session_history_summary`
+
+Aggregates financial metrics per session. Used by `get_weekly_trends` RPC and admin dashboard history view.
+
+```sql
+CREATE VIEW public.session_history_summary AS
+  SELECT s.id AS session_id, s.session_date, s.status, s.closed_at,
+         COALESCE(COUNT(DISTINCT t.id), 0)::BIGINT AS transaction_count,
+         COALESCE(SUM(td.subtotal_harga_jual), 0)::BIGINT AS gross_revenue,
+         COALESCE(SUM(td.subtotal_harga_asli), 0)::BIGINT AS total_remittance,
+         COALESCE(SUM(td.subtotal_harga_jual - td.subtotal_harga_asli), 0)::BIGINT AS omk_net_profit
+  FROM sessions s
+  LEFT JOIN transactions t ON t.session_id = s.id
+  LEFT JOIN transaction_details td ON td.transaction_id = t.id
+  GROUP BY s.id, s.session_date, s.status, s.closed_at;
+```
+
+### 5.3 `top_products_sales`
+
+Top-selling products with sell-through rate across all closed sessions.
+
+```sql
+CREATE VIEW public.top_products_sales AS
+  WITH product_sales AS (
+    SELECT p.nama_produk, COALESCE(SUM(td.qty), 0)::BIGINT AS total_sold
+    FROM products p
+    JOIN transaction_details td ON td.product_id = p.id
+    JOIN transactions t ON t.id = td.transaction_id
+    JOIN sessions s ON s.id = t.session_id
+    WHERE s.status = 'closed'
+    GROUP BY p.nama_produk
+  ), product_stock AS (
+    SELECT p.nama_produk, SUM(p.stok_awal) AS total_stok_awal
+    FROM products p
+    JOIN sessions s ON s.session_date = p.session_date
+    WHERE s.status = 'closed'
+    GROUP BY p.nama_produk
+  )
+  SELECT ps.nama_produk, ps.total_sold, pst.total_stok_awal,
+         CASE WHEN pst.total_stok_awal > 0
+           THEN ROUND((ps.total_sold::NUMERIC / pst.total_stok_awal::NUMERIC) * 100, 1)
+           ELSE 0 END AS sell_through_rate
+  FROM product_sales ps
+  JOIN product_stock pst ON pst.nama_produk = ps.nama_produk
+  ORDER BY ps.total_sold DESC;
+```
+
+### 5.4 `umkm_profit_contribution`
+
+OMK net profit breakdown by UMKM across all closed sessions.
+
+```sql
+CREATE VIEW public.umkm_profit_contribution AS
+  SELECT u.nama_umkm,
+         COALESCE(SUM((td.harga_jual_snapshot - td.harga_asli_snapshot) * td.qty), 0)::BIGINT AS omk_profit
+  FROM umkm u
+  JOIN products p ON p.umkm_id = u.id
+  JOIN transaction_details td ON td.product_id = p.id
+  JOIN transactions t ON t.id = td.transaction_id
+  JOIN sessions s ON s.id = t.session_id
+  WHERE s.status = 'closed'
+  GROUP BY u.nama_umkm;
+```
+
+---
+
+## 6. Row-Level Security (RLS) Policies
+
+Enable RLS on all tables before applying policies.
+
+```sql
+ALTER TABLE public.umkm               ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.products            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sessions            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.transactions        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.transaction_details ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reconciliation      ENABLE ROW LEVEL SECURITY;
+```
+
+> ⚠️ **Note on transactions:** The `transactions` table has RLS enabled but NO policies defined. All access is controlled through the `complete_transaction` RPC (SECURITY DEFINER), bypassing RLS. Direct client-side SELECT on transactions is effectively blocked for all roles (default-deny).
+
+### 6.1 RLS on `umkm`
+
+```sql
 CREATE POLICY "umkm_read_all" ON public.umkm
   FOR SELECT USING (auth.role() = 'authenticated');
 
--- Only admin can insert/update
 CREATE POLICY "umkm_write_admin" ON public.umkm
   FOR ALL USING (public.get_user_role() = 'admin');
 ```
 
-### 5.2 RLS on `products`
+### 6.2 RLS on `products`
 
 ```sql
--- Cashier: can read products BUT harga_asli is excluded via a view (see below)
 CREATE POLICY "products_read_cashier" ON public.products
   FOR SELECT USING (auth.role() = 'authenticated');
 
--- Admin: full read/write
 CREATE POLICY "products_write_admin" ON public.products
   FOR ALL USING (public.get_user_role() = 'admin');
 ```
 
-**Cashier-safe view (hides `harga_asli`):**
-```sql
-CREATE VIEW public.products_cashier_view AS
-  SELECT
-    id, umkm_id, session_date, nama_produk,
-    harga_jual,   -- Selling price: visible to cashier
-    stok_awal, stok_sekarang, is_active, created_at
-    -- harga_asli intentionally omitted
-  FROM public.products;
+> Cashier queries the `products_cashier_view` (see §5.1) instead of the base table to avoid exposing `harga_asli`.
 
--- Frontend cashier role queries this view, not the base table
-GRANT SELECT ON public.products_cashier_view TO authenticated;
-```
-
-### 5.3 RLS on `sessions`
+### 6.3 RLS on `sessions`
 
 ```sql
 CREATE POLICY "sessions_read_all" ON public.sessions
@@ -703,26 +1214,13 @@ CREATE POLICY "sessions_write_admin" ON public.sessions
   FOR ALL USING (public.get_user_role() = 'admin');
 ```
 
-### 5.4 RLS on `transactions`
+### 6.4 RLS on `transactions`
+
+No policies defined. All writes go through the `complete_transaction` RPC (SECURITY DEFINER). Direct SELECT/INSERT/UPDATE/DELETE from the client is denied for all roles (default PostgreSQL RLS deny).
+
+### 6.5 RLS on `transaction_details`
 
 ```sql
--- Cashier can insert (via RPC) and read their own transactions
-CREATE POLICY "transactions_insert_authenticated" ON public.transactions
-  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
-
-CREATE POLICY "transactions_select_cashier" ON public.transactions
-  FOR SELECT USING (
-    public.get_user_role() = 'admin'
-    OR cashier_id = auth.uid()
-  );
-
--- No UPDATE or DELETE for anyone (immutable after commit)
-```
-
-### 5.5 RLS on `transaction_details`
-
-```sql
--- Admin can read all; cashier cannot read transaction_details (harga_asli_snapshot exposed)
 CREATE POLICY "td_read_admin" ON public.transaction_details
   FOR SELECT USING (public.get_user_role() = 'admin');
 
@@ -730,7 +1228,7 @@ CREATE POLICY "td_read_admin" ON public.transaction_details
 -- No direct client INSERT allowed
 ```
 
-### 5.6 RLS on `reconciliation`
+### 6.6 RLS on `reconciliation`
 
 ```sql
 CREATE POLICY "reconciliation_read_admin" ON public.reconciliation
@@ -745,7 +1243,7 @@ CREATE POLICY "reconciliation_update_admin" ON public.reconciliation
 
 ---
 
-## 6. Indexes
+## 7. Indexes
 
 ```sql
 -- Products: primary query pattern (session_date + is_active)
@@ -768,44 +1266,64 @@ CREATE INDEX idx_reconciliation_session ON public.reconciliation(session_id);
 
 ---
 
-## 7. Realtime Configuration
+## 8. Realtime Configuration
 
-Enable Supabase Realtime for the `products` table only (the only table requiring live multi-device sync):
+Enable Supabase Realtime for stock-sensitive tables requiring live multi-device sync:
 
 ```sql
--- In Supabase dashboard: Database → Replication → enable for:
+ALTER PUBLICATION supabase_realtime ADD TABLE public.umkm;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.products;
 
--- Transactions can use polling (admin dashboard refresh) — not realtime critical
+-- Transactions use polling (admin dashboard refresh) — not realtime critical
 -- DO NOT add transaction_details to realtime (high write volume, not needed client-side)
 ```
 
 **Frontend subscription pattern:**
+
 ```typescript
 // Subscribe only to stok_sekarang changes for today's session
 supabase
-  .channel('products-stock')
-  .on('postgres_changes', {
-    event: 'UPDATE',
-    schema: 'public',
-    table: 'products',
-    filter: `session_date=eq.${todayDate}`
-  }, (payload) => {
-    // Update local product state with payload.new.stok_sekarang
-  })
-  .subscribe()
+  .channel("products-stock")
+  .on(
+    "postgres_changes",
+    {
+      event: "UPDATE",
+      schema: "public",
+      table: "products",
+      filter: `session_date=eq.${todayDate}`,
+    },
+    (payload) => {
+      // Update local product state with payload.new.stok_sekarang
+    },
+  )
+  .subscribe();
 ```
 
 ---
 
-## 8. Seed Data & Initial Setup
+## 9. Seed Data & Initial Setup
 
 ```sql
--- Initial admin user (create via Supabase Auth dashboard, then set metadata)
--- In Supabase Auth: set user_metadata = {"role": "admin"} for admin accounts
--- Cashier accounts: user_metadata = {"role": "cashier"}
+-- Users created via admin_create_user RPC (or Supabase Auth dashboard)
+-- user_metadata includes: {"role": "admin"|"cashier", "is_active": true}
+-- Existing users (as of 2026-06-28):
 
--- Example UMKM seed data (replace with real data)
+-- | Email                          | Role      | Active |
+-- |--------------------------------|-----------|--------|
+-- | marcellinusyovian@gmail.com    | admin     | yes    |
+-- | marcyoin@gmail.com             | cashier   | yes    |
+-- | renditobloggerspot@gmail.com   | admin     | yes    |
+-- | inesananda8@gmail.com          | admin     | yes    |
+-- | yuventiamrc06@gmail.com        | admin     | yes    |
+-- | nicholasmartinus2896@gmail.com | cashier   | yes    |
+-- | katarinaayudya@gmail.com       | cashier   | yes    |
+-- | plmmalven@gmail.com            | cashier   | yes    |
+-- | randitaantero@gmail.com        | cashier   | yes    |
+-- | louisajaro765@gmail.com        | cashier   | yes    |
+-- | pebiiolaa@gmail.com            | cashier   | yes    |
+-- | joshuakristofer874@gmail.com   | cashier   | yes    |
+
+-- UMKM seed data (8 partners as of 2026-06-28)
 INSERT INTO public.umkm (nama_umkm, kontak_wa) VALUES
   ('Ibu Sari - Kue Kering',  '6281234567890'),
   ('Pak Budi - Minuman',     '6281234567891'),
@@ -818,10 +1336,15 @@ INSERT INTO public.umkm (nama_umkm, kontak_wa) VALUES
 
 ---
 
-## 9. Migration Notes
+## 10. Migration Notes
 
-- Always run schema changes in order: tables → triggers → functions → RLS policies → indexes
-- The `complete_transaction` RPC must be deployed before the frontend cashier feature goes live
+- Always run schema changes in order: tables → triggers → functions → views → RLS policies → indexes → realtime
+- The `complete_transaction` RPC (both overloads) must be deployed before the frontend cashier feature goes live
 - `SECURITY DEFINER` functions run as the table owner — verify owner permissions after deployment
+- Admin user management RPCs (`admin_create_user`, etc.) directly write to `auth.users` — test on dev branch before production
+- `get_session_financial_summary` uses two separate aggregations (totals + per-UMKM) — do not merge into a single GROUP BY
+- `reopen_session` requires `can_reopen_session: true` in the caller's `user_metadata` JWT claim
+- `reset_session` and `admin_toggle_user_active` are restricted to `marcellinusyovian@gmail.com` only — do not change this guard
+- `get_weekly_trends` depends on the `session_history_summary` view — create view before function
 - Test RLS by switching `anon` and `authenticated` roles in Supabase SQL editor before release
 - `stok_sekarang` should never go negative — monitor with: `SELECT * FROM products WHERE stok_sekarang < 0`

@@ -57,6 +57,11 @@ const activeTabProducts = computed(() => {
   return list
 })
 
+const activeUmkmList = computed(() => {
+  const activeUmkmIds = new Set(productStore.products.map(p => p.umkm_id))
+  return umkmStore.umkmList.filter(u => activeUmkmIds.has(u.id))
+})
+
 const changeAmount = computed(() => {
   const num = Number(numpadValue.value)
   if (!numpadValue.value || isNaN(num)) return -1
@@ -283,7 +288,7 @@ const numpadKeys = [
                 Semua
               </button>
               <button
-                v-for="u in umkmStore.umkmList"
+                v-for="u in activeUmkmList"
                 :key="u.id"
                 @click="selectedUmkmFilter = u.id"
                 class="pos-pill"

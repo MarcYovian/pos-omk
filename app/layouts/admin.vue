@@ -13,6 +13,7 @@ const isMobileMenuOpen = ref(false)
 
 const navItems = [
   { name: 'Ikhtisar', path: '/admin', icon: 'heroicons:squares-2x2' },
+  { name: 'Master Data UMKM', path: '/admin/umkm', icon: 'heroicons:building-storefront' },
   { name: 'Setup Katalog', path: '/admin/setup', icon: 'heroicons:cog-8-tooth' },
   { name: 'Finansial Sesi', path: '/admin/dashboard', icon: 'heroicons:chart-bar', requiresSession: true },
   { name: 'Rekonsiliasi Stok', path: '/admin/reconciliation', icon: 'heroicons:clipboard-document-check', requiresSession: true },
@@ -44,6 +45,7 @@ const currentPath = computed(() => route.path)
 
 const pageTitle = computed(() => {
   if (route.path === '/admin') return 'Ikhtisar Admin'
+  if (route.path.startsWith('/admin/umkm')) return 'Master Data UMKM'
   if (route.path.startsWith('/admin/setup')) return 'Setup Mingguan'
   if (route.path === '/admin/dashboard') return 'Finansial Sesi'
   if (route.path === '/admin/reconciliation') return 'Rekonsiliasi Sesi'

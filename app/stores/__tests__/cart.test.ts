@@ -33,6 +33,8 @@ describe('useCartStore', () => {
     const cart = useCartStore()
     cart.addItem({
       id: '1',
+      session_id: 'session-1',
+      umkm_id: 'umkm-1',
       nama_produk: 'Kue',
       harga_jual: 10000,
       stok_awal: 5,
@@ -41,7 +43,7 @@ describe('useCartStore', () => {
       created_at: ''
     })
     expect(cart.items).toHaveLength(1)
-    expect(cart.items[0].qty).toBe(1)
+    expect(cart.items[0]!.qty).toBe(1)
     expect(cart.total).toBe(10000)
   })
 
@@ -49,6 +51,8 @@ describe('useCartStore', () => {
     const cart = useCartStore()
     const product = {
       id: '1',
+      session_id: 'session-1',
+      umkm_id: 'umkm-1',
       nama_produk: 'Kue',
       harga_jual: 10000,
       stok_awal: 2,
@@ -59,6 +63,6 @@ describe('useCartStore', () => {
     cart.addItem(product)
     cart.addItem(product)
     cart.addItem(product) // Third tap — should be rejected by stock limit
-    expect(cart.items[0].qty).toBe(2)
+    expect(cart.items[0]!.qty).toBe(2)
   })
 })
