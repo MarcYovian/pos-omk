@@ -29,8 +29,10 @@
 /login                   → Login page (unauthenticated only)
 /pos                     → Cashier POS screen [AUTH: cashier + admin]
 /admin                   → Admin dashboard hub [AUTH: admin only]
+/admin/umkm              → Master Data UMKM (CRU) [AUTH: admin only]
+/admin/umkm/[umkm_id]    → Master Products catalog (CRUD) [AUTH: admin only]
 /admin/setup             → Weekly session setup [AUTH: admin only]
-/admin/setup/[umkm_id]   → Product setup for specific UMKM [AUTH: admin only]
+/admin/setup/[umkm_id]   → Session products allocation [AUTH: admin only]
 /admin/dashboard         → Revenue split dashboard [AUTH: admin only]
 /admin/reconciliation    → End-of-day stock reconciliation [AUTH: admin only]
 /admin/reports           → WhatsApp report generator [AUTH: admin only]
@@ -132,13 +134,13 @@ Check: Does a session record exist for today's date?
      │
      ├─ YES (status: 'open')
      │    → Load existing session
-     │    → Show session summary + product list
-     │    → Admin can still edit products
+     │    → Show list of participating partners for this session
+     │    → Admin can add/remove participating partners or setup products
      │
      ├─ YES (status: 'closed')
-     │    → Show read-only view
+     │    → Show read-only view of participating partners
      │    → Banner: "Sesi hari ini sudah ditutup"
-     │    → No edits allowed
+     │    → No edits allowed (except "Buka Kembali Sesi" if authorized)
      │
      └─ NO
           → Show "Buka Sesi Baru" button
@@ -149,34 +151,42 @@ Check: Does a session record exist for today's date?
      INSERT INTO sessions (session_date, opened_by)
      VALUES (TODAY, current_user_id)
           │
-          ├─ SUCCESS → Refresh, show empty product setup
+          ├─ SUCCESS → Refresh, show empty setup page with "Pilih Mitra Sesi" button
           └─ ERROR   → Toast: "Gagal membuka sesi. Coba lagi."
 ```
 
-### 3.2 UMKM Product Configuration
+### 3.2 UMKM Session Product Configuration
 
 ```
-/admin/setup shows list of UMKM cards
+/admin/setup shows cards of participating partners in today's session
      │
-     Each UMKM card shows:
+     Add partner to session:
+     - Admin taps "Pilih Mitra Sesi"
+     - Selects an active UMKM from dropdown
+     - Partner card appears in the list (persisted in localStorage)
+     │
+     Each partner card shows:
      - UMKM name
-     - Number of products configured for today
-     - "Tambah Produk" button
+     - Number of session products configured for today
+     - "Setup Produk Sesi" button
+     - Close button to remove partner from session (available if product count = 0)
      │
-     Admin taps "Tambah Produk" on a UMKM card
+     Admin taps "Setup Produk Sesi" on a partner card
      │
      ▼
 Navigate to /admin/setup/[umkm_id]
      │
      ▼
-Show product form + existing products for this UMKM + today's session_date
+Show session product management view:
+- Form to allocate products from "active master products"
+- Table of products currently active in today's session
 
-=== ADD PRODUCT FORM ===
+=== ALLOCATE PRODUCT TO SESSION ===
 Fields:
-  - nama_produk  (text input, required, max 100 chars)
-  - harga_asli   (number input, required, > 0, label: "Harga UMKM (Rp)")
-  - harga_jual   (number input, required, >= harga_asli, label: "Harga Jual (Rp)")
-  - stok_awal    (number input, required, > 0, label: "Jumlah Stok")
+  - master_product_id (select dropdown listing active master products of this UMKM)
+  - harga_asli        (cost price, defaulted from master product cost, editable)
+  - harga_jual        (selling price, must be >= harga_asli, editable)
+  - stok_awal         (starting session stock, required, > 0)
 
 Client-side validation on submit:
   ✓ All fields non-empty
@@ -186,24 +196,27 @@ Client-side validation on submit:
 
 On valid submit:
   ▼
-INSERT INTO products (umkm_id, session_date, nama_produk, harga_asli, harga_jual, stok_awal)
+INSERT INTO session_products (session_id, master_product_id, harga_asli, harga_jual, stok_awal)
   │
-  ├─ SUCCESS → Product appears in list below form; form resets for next product
-  └─ ERROR   → Toast: "Gagal menambah produk. Coba lagi."
+  ├─ SUCCESS → Product is added to session table below; form resets
+  └─ ERROR   → Toast: "Gagal mengalokasikan produk. Coba lagi."
 ```
 
-### 3.3 Toggle Product Active State
+### 3.3 Edit/Toggle Session Product State
 
 ```
-Each product row shows a toggle switch (is_active)
-     │
-Admin toggles switch
+Each session product row shows:
+- Harga Jual, Harga UMKM, Stok Awal, Stok Sekarang (editable in inline modal)
+- Active switch to disable/enable product in current session
+- Remove button to deallocate product from session (available if no transactions exist)
+
+Admin edits values or toggles switch:
      │
      ▼
-UPDATE products SET is_active = [new_value] WHERE id = [product_id]
+UPDATE session_products SET [fields] WHERE id = [session_product_id]
      │
-     ├─ SUCCESS → Toggle reflects new state; POS screen updates in real-time
-     └─ ERROR   → Revert toggle UI; Toast: "Gagal mengubah status produk"
+     ├─ SUCCESS → UI reflects new values; Cashier POS screen updates in real-time
+     └─ ERROR   → Revert UI changes; Toast error message (e.g. "Terdapat transaksi...")
 ```
 
 ### 3.4 Setup Completion
@@ -482,11 +495,11 @@ Admin taps "Ya, Tutup Sesi":
      ▼
 Step 1: Batch insert reconciliation records
   FOR EACH product:
-    INSERT INTO reconciliation (session_id, product_id, stok_fisik,
+    INSERT INTO reconciliation (session_id, session_product_id, stok_fisik,
                                 stok_sekarang_snap, recorded_by)
-    VALUES (session_id, product_id, stok_fisik_input,
+    VALUES (session_id, session_product_id, stok_fisik_input,
             current stok_sekarang, admin_id)
-    ON CONFLICT (session_id, product_id) DO UPDATE SET stok_fisik = EXCLUDED.stok_fisik
+    ON CONFLICT (session_id, session_product_id) DO UPDATE SET stok_fisik = EXCLUDED.stok_fisik
      │
      ▼
 Step 2: Call RPC: close_session(session_id, admin_id)
@@ -517,9 +530,9 @@ If session not closed → redirect to /admin/reconciliation with message:
      │
      ▼
 Fetch report data:
-  JOIN: products → transaction_details → reconciliation
-  GROUP BY: umkm_id, product_id
-  Include: products with 0 sales (still need to report returns)
+  JOIN: master_products → session_products → transaction_details → reconciliation
+  GROUP BY: umkm_id, session_product_id
+  Include: session products with 0 sales (still need to report returns)
      │
      ▼
 Display one card per UMKM:
@@ -649,15 +662,15 @@ interface SessionState {
 ```typescript
 // stores/products.ts
 interface ProductState {
-  products: Product[]         // All active products for today (cashier view: no harga_asli)
+  products: (ProductCashierView | ProductAdmin)[]  // Active products in session
   isLoading: boolean
   lastFetchedAt: Date | null
   realtimeSubscription: RealtimeChannel | null
 }
 
 // Actions:
-// - fetchTodayProducts()    → query products_cashier_view
-// - subscribeRealtime()     → Supabase Realtime on products table
+// - fetchTodayProducts()    → query products_cashier_view by session_id
+// - subscribeRealtime()     → Supabase Realtime on session_products table filtered by session_id
 // - unsubscribeRealtime()
 // - updateProductStock(productId, newStock)  → called from realtime handler
 // - toggleActive(productId, isActive)        → admin only

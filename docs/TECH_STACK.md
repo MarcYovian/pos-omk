@@ -300,15 +300,15 @@ npx supabase gen types typescript --project-id [PROJECT_ID] > app/types/database
 const supabase = useSupabaseClient<Database>()
 
 const { data, error } = await supabase
-  .from('products')                           // Table name as string literal
+  .from('products_cashier_view')                           // Table name as string literal
   .select('id, nama_produk, harga_jual, stok_sekarang, is_active, umkm_id')
-  .eq('session_date', todayDate)
+  .eq('session_id', sessionId)
   .eq('is_active', true)
   .gt('stok_sekarang', 0)
   .order('nama_produk', { ascending: true })
 
 if (error) throw error
-// data is fully typed as products row[]
+// data is fully typed as products_cashier_view row[]
 ```
 
 **Rule:** Always destructure `{ data, error }` and handle `error` before using `data`.
@@ -356,19 +356,19 @@ if (error) {
 // Always store the channel reference for cleanup
 let productsChannel: RealtimeChannel | null = null
 
-const subscribeToProducts = (sessionDate: string) => {
+const subscribeToProducts = (sessionId: string) => {
   productsChannel = supabase
-    .channel(`products-${sessionDate}`)        // Unique channel name per session
+    .channel(`products-${sessionId}`)        // Unique channel name per session
     .on(
       'postgres_changes',
       {
         event: 'UPDATE',
         schema: 'public',
-        table: 'products',
-        filter: `session_date=eq.${sessionDate}`,
+        table: 'session_products',
+        filter: `session_id=eq.${sessionId}`,
       },
       (payload) => {
-        const updated = payload.new as ProductRow
+        const updated = payload.new as SessionProductRow
         productStore.updateProductStock(updated.id, updated.stok_sekarang)
         cartStore.updateStockWarning(updated.id, updated.stok_sekarang > 0)
       }
@@ -592,16 +592,17 @@ export const useProductStore = defineStore('products', () => {
   // --- Actions ---
   const fetchTodayProducts = async () => {
     const supabase = useSupabaseClient()
-    const { todayDate } = useSessionDate()
+    const sessionStore = useSessionStore()
 
     isLoading.value = true
     error.value = null
 
     try {
+      if (!sessionStore.sessionId) return
       const { data, error: fetchError } = await supabase
         .from('products_cashier_view')    // Uses the RLS-safe view
         .select('*')
-        .eq('session_date', todayDate.value)
+        .eq('session_id', sessionStore.sessionId)
         .order('nama_produk')
 
       if (fetchError) throw fetchError
@@ -621,15 +622,16 @@ export const useProductStore = defineStore('products', () => {
 
   const subscribeRealtime = () => {
     const supabase = useSupabaseClient()
-    const { todayDate } = useSessionDate()
+    const sessionStore = useSessionStore()
+    if (!sessionStore.sessionId) return
 
     realtimeChannel = supabase
-      .channel(`products-stock-${todayDate.value}`)
+      .channel(`products-stock-${sessionStore.sessionId}`)
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
-        table: 'products',
-        filter: `session_date=eq.${todayDate.value}`,
+        table: 'session_products',
+        filter: `session_id=eq.${sessionStore.sessionId}`,
       }, (payload) => {
         updateProductStock(payload.new.id, payload.new.stok_sekarang)
       })
