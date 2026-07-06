@@ -31,21 +31,36 @@ const fetchSessionProductDetails = async (sessionDate: string) => {
   isDetailLoading.value = true
   try {
     const { data, error } = await supabase
-      .from('products' as any)
+      .from('session_products')
       .select(`
         id,
-        nama_produk,
         stok_awal,
         stok_sekarang,
         harga_asli,
         harga_jual,
-        umkm:umkm(nama_umkm)
+        session:sessions!inner(session_date),
+        master_product:master_products!inner(
+          nama_produk,
+          umkm!inner(nama_umkm)
+        )
       `)
-      .eq('session_date', sessionDate)
-      .order('nama_produk')
+      .eq('session.session_date', sessionDate) as any
 
     if (error) throw error
-    selectedSessionProducts.value = data || []
+    
+    const mapped = (data || []).map((item: any) => ({
+      id: item.id,
+      nama_produk: item.master_product?.nama_produk || '',
+      stok_awal: item.stok_awal,
+      stok_sekarang: item.stok_sekarang,
+      harga_asli: item.harga_asli,
+      harga_jual: item.harga_jual,
+      umkm: item.master_product?.umkm
+    }))
+
+    // Sort by product name client-side
+    mapped.sort((a: any, b: any) => a.nama_produk.localeCompare(b.nama_produk))
+    selectedSessionProducts.value = mapped
   } catch (e: any) {
     addToast({
       type: 'danger',

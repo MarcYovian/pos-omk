@@ -25,7 +25,11 @@ export const useSessionStore = defineStore('session', () => {
         .maybeSingle()
 
       if (fetchError) throw fetchError
-      currentSession.value = data
+
+      currentSession.value = data ? {
+        ...data,
+        status: data.status as 'open' | 'closed'
+      } : null
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : 'Unknown error'
       throw e
@@ -50,8 +54,11 @@ export const useSessionStore = defineStore('session', () => {
         .single()
 
       if (insertError) throw insertError
-      currentSession.value = data
-      return data
+      currentSession.value = data ? {
+        ...data,
+        status: data.status as 'open' | 'closed'
+      } : null
+      return currentSession.value as any
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : 'Unknown error'
       throw e
