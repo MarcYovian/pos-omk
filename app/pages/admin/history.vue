@@ -89,7 +89,7 @@ const fetchSessionTransactions = async (sessionId: string) => {
         nominal_diterima,
         kembalian,
         metode_pembayaran,
-        cashier:cashier_id(email)
+        cashier_id
       `)
       .eq('session_id', sessionId)
       .order('created_at', { ascending: false }) as any
@@ -103,6 +103,22 @@ const fetchSessionTransactions = async (sessionId: string) => {
     })
   } finally {
     isTxLoading.value = false
+  }
+}
+
+const userEmailMap = ref<Record<string, string>>({})
+
+const fetchUsers = async () => {
+  try {
+    const { data, error } = await supabase.rpc('get_all_users')
+    if (error) throw error
+    const map: Record<string, string> = {}
+    ;(data || []).forEach((u: any) => {
+      map[u.id] = u.email
+    })
+    userEmailMap.value = map
+  } catch (e) {
+    console.error('Gagal memuat data user:', e)
   }
 }
 
@@ -218,6 +234,7 @@ const totalTx = computed(() => filteredHistory.value.reduce((acc, item) => acc +
 
 onMounted(() => {
   fetchHistory()
+  fetchUsers()
 })
 
 const handlePrint = () => {
@@ -529,7 +546,7 @@ const handlePrint = () => {
                     <td class="p-3 text-slate-900 font-bold">
                       {{ new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) }}
                     </td>
-                    <td class="p-3 text-slate-500 font-bold">{{ t.cashier?.email || '-' }}</td>
+                    <td class="p-3 text-slate-500 font-bold">{{ userEmailMap[t.cashier_id] || '-' }}</td>
                     <td class="p-3 text-center">
                       <span :class="['px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider', t.metode_pembayaran === 'qris' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-amber-50 text-amber-600 border border-amber-100']">
                         {{ t.metode_pembayaran }}
