@@ -123,6 +123,13 @@ const handleEditSubmit = async () => {
     isUpdating.value = false
   }
 }
+
+const copyPublicLink = (umkmId: string) => {
+  const origin = window.location.origin
+  const url = `${origin}/umkm/performance/${umkmId}`
+  navigator.clipboard.writeText(url)
+  addToast({ type: 'success', message: 'Link performa UMKM berhasil disalin!' })
+}
 </script>
 
 <template>
@@ -218,6 +225,14 @@ const handleEditSubmit = async () => {
             title="Edit UMKM"
           >
             <Icon name="heroicons:pencil-square" class="w-4.5 h-4.5" />
+          </button>
+
+          <button
+            @click="copyPublicLink(u.id)"
+            class="p-2 text-slate-400 hover:text-brand-900 hover:bg-slate-100 border border-slate-150 bg-slate-50 rounded-xl transition min-h-[36px] min-w-[36px] flex items-center justify-center shrink-0"
+            title="Salin Link Performa"
+          >
+            <Icon name="heroicons:clipboard-document-check" class="w-4.5 h-4.5" />
           </button>
           
           <NuxtLink :to="`/admin/umkm/${u.id}`" class="flex-grow">

@@ -10,7 +10,7 @@ export interface ProductReport {
   harga_asli: number
 }
 
-export function generateUMKMReport(umkm: UMKM, products: ProductReport[], sessionDate: Date): string {
+export function generateUMKMReport(umkm: UMKM, products: ProductReport[], sessionDate: Date, origin?: string): string {
   const formattedDate = new Intl.DateTimeFormat('id-ID', {
     weekday: 'long',
     day: 'numeric',
@@ -35,6 +35,10 @@ ${qtySold} x ${formattedHargaAsli} = Rp ${formattedTotal}
   // Format with dot separator for Indonesian style
   const formattedRemittance = new Intl.NumberFormat('id-ID').format(totalRemittance);
 
+  const linkSection = origin 
+    ? `\n\n📊 Rincian performa penjualan lengkap & berkala Anda: ${origin}/umkm/performance/${umkm.id}` 
+    : '';
+
   return `Halo ${umkm.nama_umkm}! 👋
 Izin melaporkan rekap penjualan hari ini ya, Bu:
 
@@ -48,6 +52,6 @@ RINGKASAN:
 📦 Total Terjual : ${totalSold} Item
 💰 Total Setoran : Rp ${formattedRemittance}
 
-Mohon dicek kembali ya, Bu. Jika sudah sesuai, mohon konfirmasinya. Terima kasih banyak atas kerja samanya! 🙏
+Mohon dicek kembali ya, Bu. Jika sudah sesuai, mohon konfirmasinya. Terima kasih banyak atas kerja samanya! 🙏${linkSection}
 — Sie Kewirausahaan OMK`;
 }

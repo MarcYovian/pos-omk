@@ -213,7 +213,7 @@ const loadReportData = async () => {
 
       if (productReports.length > 0) {
         const dateObj = new Date(sessionDate.replace(/-/g, '/'))
-        reportMap[u.id] = generateUMKMReport(u, productReports, dateObj)
+        reportMap[u.id] = generateUMKMReport(u, productReports, dateObj, window.location.origin)
       }
     }
 
