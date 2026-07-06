@@ -24,10 +24,16 @@ const selectedSessionProducts = ref<any[]>([])
 const isDetailLoading = ref(false)
 const isDetailOpen = ref(false)
 const selectedSessionDate = ref('')
+const selectedSessionId = ref('')
+
+// Session Transaction details tab states
+const selectedSessionTransactions = ref<any[]>([])
+const isTxLoading = ref(false)
+const expandedTxId = ref<string | null>(null)
+const expandedTxDetails = ref<Record<string, any[]>>({})
+const activeTab = ref<'products' | 'transactions'>('products')
 
 const fetchSessionProductDetails = async (sessionDate: string) => {
-  selectedSessionDate.value = sessionDate
-  isDetailOpen.value = true
   isDetailLoading.value = true
   try {
     const { data, error } = await supabase
@@ -69,6 +75,92 @@ const fetchSessionProductDetails = async (sessionDate: string) => {
   } finally {
     isDetailLoading.value = false
   }
+}
+
+const fetchSessionTransactions = async (sessionId: string) => {
+  isTxLoading.value = true
+  try {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select(`
+        id,
+        created_at,
+        total_harga_jual,
+        nominal_diterima,
+        kembalian,
+        metode_pembayaran,
+        cashier:cashier_id(email)
+      `)
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: false }) as any
+
+    if (error) throw error
+    selectedSessionTransactions.value = data || []
+  } catch (e: any) {
+    addToast({
+      type: 'danger',
+      message: e.message || 'Gagal memuat daftar transaksi'
+    })
+  } finally {
+    isTxLoading.value = false
+  }
+}
+
+const toggleTxRow = async (txId: string) => {
+  if (expandedTxId.value === txId) {
+    expandedTxId.value = null
+    return
+  }
+  expandedTxId.value = txId
+  
+  if (expandedTxDetails.value[txId]) return // already loaded
+
+  try {
+    const { data, error } = await supabase
+      .from('transaction_details')
+      .select(`
+        id,
+        qty,
+        harga_jual_snapshot,
+        harga_asli_snapshot,
+        subtotal_harga_jual,
+        session_product:session_products!inner(
+          master_product:master_products!inner(
+            nama_produk
+          )
+        )
+      `)
+      .eq('transaction_id', txId) as any
+
+    if (error) throw error
+    expandedTxDetails.value[txId] = (data || []).map((td: any) => ({
+      id: td.id,
+      qty: td.qty,
+      harga_jual: td.harga_jual_snapshot,
+      subtotal: td.subtotal_harga_jual,
+      nama_produk: td.session_product?.master_product?.nama_produk || ''
+    }))
+  } catch (e: any) {
+    addToast({
+      type: 'danger',
+      message: e.message || 'Gagal memuat rincian belanjaan'
+    })
+  }
+}
+
+const openSessionDetailModal = async (session: any) => {
+  selectedSessionDate.value = session.session_date
+  selectedSessionId.value = session.session_id
+  isDetailOpen.value = true
+  activeTab.value = 'products'
+  selectedSessionTransactions.value = []
+  expandedTxId.value = null
+  expandedTxDetails.value = {}
+
+  // Fetch products first
+  await fetchSessionProductDetails(session.session_date)
+  // Fetch transactions in background
+  fetchSessionTransactions(session.session_id)
 }
 
 // Filters
@@ -271,7 +363,7 @@ const handlePrint = () => {
                 </td>
                 <td class="p-4 text-center no-print">
                   <div class="flex items-center justify-center gap-3">
-                    <button @click="fetchSessionProductDetails(item.session_date)" class="text-xs text-slate-500 hover:text-slate-800 font-bold flex items-center gap-1 transition">
+                    <button @click="openSessionDetailModal(item)" class="text-xs text-slate-500 hover:text-slate-800 font-bold flex items-center gap-1 transition">
                       <Icon name="heroicons:eye" class="w-4 h-4" />
                       Detail
                     </button>
@@ -319,7 +411,7 @@ const handlePrint = () => {
               </div>
             </div>
             <div class="border-t border-slate-100 pt-2 flex justify-between items-center no-print">
-              <button @click="fetchSessionProductDetails(item.session_date)" class="text-xs text-slate-500 hover:text-slate-800 font-bold flex items-center gap-1 transition">
+              <button @click="openSessionDetailModal(item)" class="text-xs text-slate-500 hover:text-slate-800 font-bold flex items-center gap-1 transition">
                 <Icon name="heroicons:eye" class="w-4.5 h-4.5" />
                 Detail Produk
               </button>
@@ -336,7 +428,7 @@ const handlePrint = () => {
     <!-- Modal: Detail Produk Sesi -->
     <AppModal
       v-model="isDetailOpen"
-      :title="`Rincian Produk Sesi - ${selectedSessionDate}`"
+      :title="`Rincian Sesi - ${selectedSessionDate}`"
       size="xl"
     >
       <div v-if="isDetailLoading" class="text-center py-8 text-slate-450 text-xs">
@@ -346,44 +438,144 @@ const handlePrint = () => {
         Tidak ada produk terdaftar untuk sesi ini.
       </div>
       <div v-else class="flex flex-col gap-4">
-        <div class="overflow-x-auto border border-slate-150 rounded-xl">
-          <table class="w-full text-left border-collapse text-[11px]">
-            <thead>
-              <tr class="bg-slate-50 border-b border-slate-150 text-slate-450 text-[9px] font-extrabold uppercase tracking-wider">
-                <th class="p-3">Nama Produk</th>
-                <th class="p-3">Mitra</th>
-                <th class="p-3 text-center">Stok Awal</th>
-                <th class="p-3 text-center text-emerald-600">Terjual</th>
-                <th class="p-3 text-center text-rose-600">Sisa/Retur</th>
-                <th class="p-3 text-right">Harga UMKM</th>
-                <th class="p-3 text-right">Harga Jual</th>
-                <th class="p-3 text-right text-slate-700">Gross</th>
-                <th class="p-3 text-right text-brand-900">Setoran</th>
-                <th class="p-3 text-right text-success">Laba OMK</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100 font-medium text-slate-700">
-              <tr v-for="p in selectedSessionProducts" :key="p.id" class="hover:bg-slate-50/50">
-                <td class="p-3 text-slate-900 font-bold">{{ p.nama_produk }}</td>
-                <td class="p-3 text-slate-500 font-bold">{{ p.umkm?.nama_umkm || '-' }}</td>
-                <td class="p-3 text-center font-mono font-bold">{{ p.stok_awal }}</td>
-                <td class="p-3 text-center font-mono font-bold text-emerald-600 bg-emerald-50/10">{{ p.stok_awal - p.stok_sekarang }}</td>
-                <td class="p-3 text-center font-mono font-bold text-rose-600 bg-rose-50/10">{{ p.stok_sekarang }}</td>
-                <td class="p-3 text-right font-mono text-slate-500">{{ useCurrencyFormat(p.harga_asli) }}</td>
-                <td class="p-3 text-right font-mono text-slate-800">{{ useCurrencyFormat(p.harga_jual) }}</td>
-                <td class="p-3 text-right font-mono font-bold text-slate-800 bg-slate-50/20">
-                  {{ useCurrencyFormat((p.stok_awal - p.stok_sekarang) * p.harga_jual) }}
-                </td>
-                <td class="p-3 text-right font-mono font-bold text-brand-950 bg-brand-50/10">
-                  {{ useCurrencyFormat((p.stok_awal - p.stok_sekarang) * p.harga_asli) }}
-                </td>
-                <td class="p-3 text-right font-mono font-bold text-success bg-emerald-50/5">
-                  {{ useCurrencyFormat((p.stok_awal - p.stok_sekarang) * (p.harga_jual - p.harga_asli)) }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <!-- TAB BAR SWITCHER -->
+        <div class="flex border-b border-slate-150 text-xs gap-2">
+          <button
+            @click="activeTab = 'products'"
+            :class="['px-4 py-2 border-b-2 font-bold transition duration-200', activeTab === 'products' ? 'border-brand-900 text-brand-900' : 'border-transparent text-slate-400 hover:text-slate-700']"
+          >
+            Rincian Produk
+          </button>
+          <button
+            @click="activeTab = 'transactions'"
+            :class="['px-4 py-2 border-b-2 font-bold transition duration-200', activeTab === 'transactions' ? 'border-brand-900 text-brand-900' : 'border-transparent text-slate-400 hover:text-slate-700']"
+          >
+            Daftar Transaksi ({{ selectedSessionTransactions.length }})
+          </button>
         </div>
+
+        <!-- TAB: PRODUCTS -->
+        <template v-if="activeTab === 'products'">
+          <div class="overflow-x-auto border border-slate-150 rounded-xl">
+            <table class="w-full text-left border-collapse text-[11px]">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-150 text-slate-450 text-[9px] font-extrabold uppercase tracking-wider">
+                  <th class="p-3">Nama Produk</th>
+                  <th class="p-3">Mitra</th>
+                  <th class="p-3 text-center">Stok Awal</th>
+                  <th class="p-3 text-center text-emerald-600">Terjual</th>
+                  <th class="p-3 text-center text-rose-600">Sisa/Retur</th>
+                  <th class="p-3 text-right">Harga UMKM</th>
+                  <th class="p-3 text-right">Harga Jual</th>
+                  <th class="p-3 text-right text-slate-700">Gross</th>
+                  <th class="p-3 text-right text-brand-900">Setoran</th>
+                  <th class="p-3 text-right text-success">Laba OMK</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-medium text-slate-700">
+                <tr v-for="p in selectedSessionProducts" :key="p.id" class="hover:bg-slate-50/50">
+                  <td class="p-3 text-slate-900 font-bold">{{ p.nama_produk }}</td>
+                  <td class="p-3 text-slate-500 font-bold">{{ p.umkm?.nama_umkm || '-' }}</td>
+                  <td class="p-3 text-center font-mono font-bold">{{ p.stok_awal }}</td>
+                  <td class="p-3 text-center font-mono font-bold text-emerald-600 bg-emerald-50/10">{{ p.stok_awal - p.stok_sekarang }}</td>
+                  <td class="p-3 text-center font-mono font-bold text-rose-600 bg-rose-50/10">{{ p.stok_sekarang }}</td>
+                  <td class="p-3 text-right font-mono text-slate-500">{{ useCurrencyFormat(p.harga_asli) }}</td>
+                  <td class="p-3 text-right font-mono text-slate-800">{{ useCurrencyFormat(p.harga_jual) }}</td>
+                  <td class="p-3 text-right font-mono font-bold text-slate-800 bg-slate-50/20">
+                    {{ useCurrencyFormat((p.stok_awal - p.stok_sekarang) * p.harga_jual) }}
+                  </td>
+                  <td class="p-3 text-right font-mono font-bold text-brand-950 bg-brand-50/10">
+                    {{ useCurrencyFormat((p.stok_awal - p.stok_sekarang) * p.harga_asli) }}
+                  </td>
+                  <td class="p-3 text-right font-mono font-bold text-success bg-emerald-50/5">
+                    {{ useCurrencyFormat((p.stok_awal - p.stok_sekarang) * (p.harga_jual - p.harga_asli)) }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+
+        <!-- TAB: TRANSACTIONS -->
+        <template v-else>
+          <div v-if="isTxLoading" class="text-center py-8 text-slate-450 text-xs">
+            Memuat daftar transaksi...
+          </div>
+          <div v-else-if="selectedSessionTransactions.length === 0" class="text-center py-8 text-slate-450 text-xs">
+            Tidak ada transaksi tercatat untuk sesi ini.
+          </div>
+          <div v-else class="overflow-x-auto border border-slate-150 rounded-xl">
+            <table class="w-full text-left border-collapse text-[11px]">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-150 text-slate-450 text-[9px] font-extrabold uppercase tracking-wider">
+                  <th class="p-3 w-10 text-center">Detail</th>
+                  <th class="p-3">Waktu</th>
+                  <th class="p-3">Kasir</th>
+                  <th class="p-3 text-center">Metode</th>
+                  <th class="p-3 text-right">Total Belanja</th>
+                  <th class="p-3 text-right">Tunai/Diterima</th>
+                  <th class="p-3 text-right">Kembalian</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-medium text-slate-700">
+                <template v-for="t in selectedSessionTransactions" :key="t.id">
+                  <tr class="hover:bg-slate-50/50 cursor-pointer" @click="toggleTxRow(t.id)">
+                    <td class="p-3 text-center">
+                      <Icon
+                        :name="expandedTxId === t.id ? 'heroicons:chevron-down-solid' : 'heroicons:chevron-right-solid'"
+                        class="w-4 h-4 text-slate-400"
+                      />
+                    </td>
+                    <td class="p-3 text-slate-900 font-bold">
+                      {{ new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) }}
+                    </td>
+                    <td class="p-3 text-slate-500 font-bold">{{ t.cashier?.email || '-' }}</td>
+                    <td class="p-3 text-center">
+                      <span :class="['px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider', t.metode_pembayaran === 'qris' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-amber-50 text-amber-600 border border-amber-100']">
+                        {{ t.metode_pembayaran }}
+                      </span>
+                    </td>
+                    <td class="p-3 text-right font-mono font-bold text-slate-800">{{ useCurrencyFormat(t.total_harga_jual) }}</td>
+                    <td class="p-3 text-right font-mono text-slate-500">{{ useCurrencyFormat(t.nominal_diterima) }}</td>
+                    <td class="p-3 text-right font-mono text-slate-500">{{ useCurrencyFormat(t.kembalian) }}</td>
+                  </tr>
+
+                  <!-- Collapsible Nested Item Details -->
+                  <tr v-if="expandedTxId === t.id" class="bg-slate-50/20">
+                    <td colspan="7" class="p-4">
+                      <div v-if="!expandedTxDetails[t.id]" class="text-center py-2 text-slate-400 text-[10px]">
+                        Memuat rincian barang...
+                      </div>
+                      <div v-else class="flex flex-col gap-2 max-w-lg">
+                        <h4 class="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">Rincian Belanjaan</h4>
+                        <div class="border border-slate-150 rounded-lg overflow-hidden bg-white text-[10px]">
+                          <table class="w-full text-left border-collapse">
+                            <thead>
+                              <tr class="bg-slate-50 border-b border-slate-100 text-slate-450 text-[8px] font-bold uppercase">
+                                <th class="p-2">Nama Produk</th>
+                                <th class="p-2 text-center">Qty</th>
+                                <th class="p-2 text-right">Harga Jual</th>
+                                <th class="p-2 text-right">Subtotal</th>
+                              </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-50">
+                              <tr v-for="item in expandedTxDetails[t.id]" :key="item.id">
+                                <td class="p-2 text-slate-900 font-bold">{{ item.nama_produk }}</td>
+                                <td class="p-2 text-center font-mono font-bold">{{ item.qty }}</td>
+                                <td class="p-2 text-right font-mono text-slate-500">{{ useCurrencyFormat(item.harga_jual) }}</td>
+                                <td class="p-2 text-right font-mono font-bold text-slate-800">{{ useCurrencyFormat(item.subtotal) }}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </template>
       </div>
       <template #footer>
         <AppButton variant="secondary" @click="isDetailOpen = false">Tutup</AppButton>
