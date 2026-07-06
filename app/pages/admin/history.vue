@@ -16,8 +16,9 @@ definePageMeta({
 const supabase = useSupabase()
 const { addToast } = useToast()
 
-const historyData = ref<any[]>([])
-const isLoading = ref(false)
+import { useHistoryStore } from '~/stores/history'
+const historyStore = useHistoryStore()
+const isLoading = computed(() => historyStore.isLoading)
 
 // Session Product Details modal states
 const selectedSessionProducts = ref<any[]>([])
@@ -34,6 +35,11 @@ const expandedTxDetails = ref<Record<string, any[]>>({})
 const activeTab = ref<'products' | 'transactions'>('products')
 
 const fetchSessionProductDetails = async (sessionDate: string) => {
+  if (historyStore.productsCache[sessionDate]) {
+    selectedSessionProducts.value = historyStore.productsCache[sessionDate]
+    return
+  }
+
   isDetailLoading.value = true
   try {
     const { data, error } = await supabase
@@ -66,6 +72,7 @@ const fetchSessionProductDetails = async (sessionDate: string) => {
 
     // Sort by product name client-side
     mapped.sort((a: any, b: any) => a.nama_produk.localeCompare(b.nama_produk))
+    historyStore.productsCache[sessionDate] = mapped
     selectedSessionProducts.value = mapped
   } catch (e: any) {
     addToast({
@@ -78,6 +85,11 @@ const fetchSessionProductDetails = async (sessionDate: string) => {
 }
 
 const fetchSessionTransactions = async (sessionId: string) => {
+  if (historyStore.transactionsCache[sessionId]) {
+    selectedSessionTransactions.value = historyStore.transactionsCache[sessionId]
+    return
+  }
+
   isTxLoading.value = true
   try {
     const { data, error } = await supabase
@@ -95,6 +107,7 @@ const fetchSessionTransactions = async (sessionId: string) => {
       .order('created_at', { ascending: false }) as any
 
     if (error) throw error
+    historyStore.transactionsCache[sessionId] = data || []
     selectedSessionTransactions.value = data || []
   } catch (e: any) {
     addToast({
@@ -184,29 +197,24 @@ const startDate = ref('')
 const endDate = ref('')
 const searchQuery = ref('')
 
-const fetchHistory = async () => {
-  isLoading.value = true
+const fetchHistory = async (force = false) => {
   try {
-    let query = supabase
-      .from('session_history_summary' as any)
-      .select('*')
-      .order('session_date', { ascending: false })
-
-    const { data, error } = await query
-    if (error) throw error
-    historyData.value = data || []
+    await historyStore.fetchHistory(force)
   } catch (e: any) {
     addToast({
       type: 'danger',
       message: e.message || 'Gagal memuat riwayat sesi'
     })
-  } finally {
-    isLoading.value = false
   }
 }
 
+const handleRefresh = async () => {
+  historyStore.clearCache()
+  await fetchHistory(true)
+}
+
 const filteredHistory = computed(() => {
-  return historyData.value.filter(item => {
+  return historyStore.historyList.filter(item => {
     // Search query filter
     const query = searchQuery.value.toLowerCase().trim()
     const matchesSearch = !query || 
@@ -251,7 +259,7 @@ const handlePrint = () => {
         <p class="text-xs text-slate-500 mt-0.5">Daftar lengkap transaksi dan finansial sesi-sesi sebelumnya yang telah ditutup</p>
       </div>
       <div class="flex items-center gap-2">
-        <AppButton @click="fetchHistory" variant="secondary" size="sm" class="font-bold text-xs">
+        <AppButton @click="handleRefresh" variant="secondary" size="sm" class="font-bold text-xs">
           <Icon name="heroicons:arrow-path" class="w-4 h-4 mr-1" />
           Refresh
         </AppButton>

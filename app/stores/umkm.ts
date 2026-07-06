@@ -8,7 +8,9 @@ export const useUmkmStore = defineStore('umkm', () => {
   const isLoading = ref(false)
   const error = ref<string | null>(null)
 
-  const fetchAll = async () => {
+  const fetchAll = async (force = false) => {
+    if (umkmList.value.length > 0 && !force) return
+
     const supabase = useSupabase()
     isLoading.value = true
     error.value = null
