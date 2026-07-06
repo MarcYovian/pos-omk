@@ -1,6 +1,6 @@
 <!-- components/ui/AppInput.vue -->
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -25,10 +25,23 @@ const emit = defineEmits<{
   'update:modelValue': [value: string | number]
 }>()
 
+const showPassword = ref(false)
+
+const inputType = computed(() => {
+  if (props.type === 'password') {
+    return showPassword.value ? 'text' : 'password'
+  }
+  return props.type
+})
+
 const handleInput = (event: Event) => {
   const target = event.target as HTMLInputElement
   const value = props.type === 'number' ? Number(target.value) : target.value
   emit('update:modelValue', value)
+}
+
+const togglePasswordVisibility = () => {
+  showPassword.value = !showPassword.value
 }
 </script>
 
@@ -38,17 +51,32 @@ const handleInput = (event: Event) => {
       {{ label }}
       <span v-if="required" class="text-danger">*</span>
     </label>
-    <input
-      :value="modelValue"
-      :type="type"
-      :placeholder="placeholder"
-      :inputmode="inputMode"
-      :disabled="disabled"
-      :required="required"
-      @input="handleInput"
-      class="w-full px-3 py-2 text-sm bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-slate-100 disabled:cursor-not-allowed min-h-[48px] min-w-[48px] border-slate-300"
-      :class="{ 'border-danger focus:ring-danger': error }"
-    />
+    
+    <div class="relative w-full">
+      <input
+        :value="modelValue"
+        :type="inputType"
+        :placeholder="placeholder"
+        :inputmode="inputMode"
+        :disabled="disabled"
+        :required="required"
+        @input="handleInput"
+        class="w-full pl-3 pr-10 py-2 text-sm bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-slate-100 disabled:cursor-not-allowed min-h-[48px] min-w-[48px] border-slate-300"
+        :class="{ 'border-danger focus:ring-danger': error }"
+      />
+      <button
+        v-if="type === 'password'"
+        type="button"
+        @click="togglePasswordVisibility"
+        class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center text-slate-400 hover:text-slate-600 focus:outline-none w-8 h-8 rounded-full hover:bg-slate-100 transition"
+      >
+        <Icon
+          :name="showPassword ? 'heroicons:eye-slash' : 'heroicons:eye'"
+          class="w-5 h-5"
+        />
+      </button>
+    </div>
+
     <p v-if="error" class="text-xs text-danger font-medium mt-0.5">{{ error }}</p>
     <p v-else-if="hint" class="text-xs text-slate-500 mt-0.5">{{ hint }}</p>
   </div>

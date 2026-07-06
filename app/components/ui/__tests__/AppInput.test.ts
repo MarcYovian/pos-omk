@@ -77,4 +77,21 @@ describe('AppInput', () => {
     })
     expect(wrapper.find('input').attributes('placeholder')).toBe('Cari produk...')
   })
+
+  it('toggles password visibility when type is password', async () => {
+    const wrapper = mount(AppInput, {
+      props: { modelValue: 'secret', type: 'password' }
+    })
+    const input = wrapper.find('input')
+    const button = wrapper.find('button')
+
+    expect(input.attributes('type')).toBe('password')
+    expect(button.exists()).toBe(true)
+
+    await button.trigger('click')
+    expect(input.attributes('type')).toBe('text')
+
+    await button.trigger('click')
+    expect(input.attributes('type')).toBe('password')
+  })
 })
