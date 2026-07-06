@@ -12,7 +12,7 @@
     <template v-else>
       <div class="flex justify-between items-center">
         <h2 class="text-sm font-bold text-slate-700">Kirim Rincian Komisi ke Mitra</h2>
-        <span class="text-xs text-slate-500 font-mono font-semibold">{{ sessionStore.sessionDate }}</span>
+        <span class="text-xs text-slate-500 font-mono font-semibold">{{ reportSessionDate }}</span>
       </div>
 
       <div class="flex flex-col gap-6">
@@ -122,22 +122,40 @@ const { addToast } = useToast()
 const reports = ref<Record<string, string>>({})
 const sentState = ref<Record<string, boolean>>({})
 const isLoading = ref(true)
+const reportSessionDate = ref('')
 
 const isManualCopyOpen = ref(false)
 const manualCopyText = ref('')
 
 const loadReportData = async () => {
   const supabase = useSupabase()
+  const route = useRoute()
+  const querySessionId = route.query.session_id as string | undefined
+
   try {
-    await sessionStore.fetchTodaySession()
-    
-    if (!sessionStore.currentSession) {
-      addToast({ type: 'warning', message: 'Sesi hari ini belum dibuka' })
+    let session: any = null
+
+    if (querySessionId) {
+      const { data: sessionData, error: sessionErr } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('id', querySessionId)
+        .single()
+
+      if (sessionErr) throw sessionErr
+      session = sessionData
+    } else {
+      await sessionStore.fetchTodaySession()
+      session = sessionStore.currentSession
+    }
+
+    if (!session) {
+      addToast({ type: 'warning', message: 'Sesi tidak ditemukan atau belum dibuka' })
       navigateTo('/admin')
       return
     }
 
-    if (sessionStore.currentSession.status !== 'closed') {
+    if (session.status !== 'closed') {
       addToast({ type: 'warning', message: 'Harap tutup sesi terlebih dahulu untuk melihat laporan.' })
       navigateTo('/admin/reconciliation')
       return
@@ -145,8 +163,9 @@ const loadReportData = async () => {
 
     await umkmStore.fetchAll()
 
-    const sessionId = sessionStore.sessionId
-    if (!sessionId) return
+    const sessionId = session.id
+    const sessionDate = session.session_date
+    reportSessionDate.value = sessionDate
 
     const { data: productsData, error: prodErr } = await supabase
       .from('session_products')
@@ -193,7 +212,7 @@ const loadReportData = async () => {
       })
 
       if (productReports.length > 0) {
-        const dateObj = new Date(sessionStore.sessionDate.replace(/-/g, '/'))
+        const dateObj = new Date(sessionDate.replace(/-/g, '/'))
         reportMap[u.id] = generateUMKMReport(u, productReports, dateObj)
       }
     }

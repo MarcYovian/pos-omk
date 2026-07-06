@@ -275,7 +275,7 @@ const handlePrint = () => {
                       <Icon name="heroicons:eye" class="w-4 h-4" />
                       Detail
                     </button>
-                    <NuxtLink :to="`/admin/reports`" class="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-900 font-bold">
+                    <NuxtLink :to="`/admin/reports?session_id=${item.session_id}`" class="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-900 font-bold">
                       <Icon name="heroicons:chat-bubble-bottom-center-text" class="w-4 h-4" />
                       WA
                     </NuxtLink>
@@ -323,7 +323,7 @@ const handlePrint = () => {
                 <Icon name="heroicons:eye" class="w-4.5 h-4.5" />
                 Detail Produk
               </button>
-              <NuxtLink :to="`/admin/reports`" class="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-900 font-bold">
+              <NuxtLink :to="`/admin/reports?session_id=${item.session_id}`" class="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-900 font-bold">
                 <Icon name="heroicons:chat-bubble-bottom-center-text" class="w-4.5 h-4.5" />
                 Kirim Laporan WA
               </NuxtLink>
