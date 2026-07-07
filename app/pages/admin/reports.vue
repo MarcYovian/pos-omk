@@ -40,7 +40,7 @@
             </span>
           </div>
 
-          <div class="bg-slate-900 text-slate-200 p-4 rounded-xl font-mono text-xs whitespace-pre-wrap leading-relaxed select-all">
+          <div class="bg-slate-900 text-slate-200 p-4 rounded-xl font-mono text-xs whitespace-pre-wrap break-all leading-relaxed select-all">
             {{ reports[u.id] }}
           </div>
 
@@ -199,8 +199,8 @@ const loadReportData = async () => {
       const uProducts = (productsData || []).filter((p: any) => p.master_product?.umkm_id === u.id)
       
       const productReports: ProductReport[] = uProducts.map((p: any) => {
-        const sold = p.stok_awal - p.stok_sekarang
         const phys = reconMap.get(p.id) ?? p.stok_sekarang
+        const sold = p.stok_awal - phys
         return {
           nama_produk: p.master_product.nama_produk,
           stok_awal: p.stok_awal,
