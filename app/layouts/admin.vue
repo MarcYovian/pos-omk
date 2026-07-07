@@ -19,6 +19,8 @@ const navItems = [
   { name: 'Rekonsiliasi Stok', path: '/admin/reconciliation', icon: 'heroicons:clipboard-document-check', requiresSession: true },
   { name: 'Laporan WhatsApp', path: '/admin/reports', icon: 'heroicons:chat-bubble-bottom-center-text', requiresClosedSession: true },
   { name: 'Riwayat Sesi', path: '/admin/history', icon: 'heroicons:archive-box' },
+  { name: 'Cash Flow', path: '/admin/cash-flow', icon: 'heroicons:banknotes' },
+  { name: 'Pembayaran UMKM', path: '/admin/payments', icon: 'heroicons:currency-dollar' },
   { name: 'Analitik Sesi', path: '/admin/analytics', icon: 'heroicons:presentation-chart-line' },
   { name: 'Kelola Pengguna', path: '/admin/users', icon: 'heroicons:users' }
 ]
@@ -51,6 +53,8 @@ const pageTitle = computed(() => {
   if (route.path === '/admin/reconciliation') return 'Rekonsiliasi Sesi'
   if (route.path === '/admin/reports') return 'Laporan WhatsApp'
   if (route.path === '/admin/history') return 'Riwayat Sesi'
+  if (route.path === '/admin/cash-flow') return 'Cash Flow'
+  if (route.path === '/admin/payments') return 'Pembayaran UMKM'
   if (route.path === '/admin/analytics') return 'Analitik Sesi'
   if (route.path === '/admin/users') return 'Kelola Pengguna'
   return 'Admin'

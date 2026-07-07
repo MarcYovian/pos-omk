@@ -2,7 +2,7 @@
 
 # OMK Consignment POS — Supabase (PostgreSQL)
 
-> **Document Status:** Ground-Truth v3.0 — Authoritative source for AI Coding Agent  
+> **Document Status:** Ground-Truth v4.0 — Authoritative source for AI Coding Agent  
 > **Database:** Supabase (PostgreSQL 15+)  
 > **Critical Rule:** Column names and types defined here are the single source of truth. Do not rename, retype, or add columns without updating this file first.
 
@@ -20,6 +20,8 @@
    - [transactions](#35-table-transactions)
    - [transaction_details](#36-table-transaction_details)
    - [reconciliation](#37-table-reconciliation)
+   - [cash_flows](#38-table-cash_flows)
+   - [umkm_payments](#39-table-umkm_payments)
 4. [Database Functions (RPC)](#4-database-functions-rpc)
 5. [Views](#5-views)
 6. [Row-Level Security (RLS) Policies](#6-row-level-security-rls-policies)
@@ -44,6 +46,8 @@ Tables:
   transactions        — One record per completed checkout
   transaction_details — Line items within each transaction (immutable after insert)
   reconciliation      — End-of-day physical stock count results
+  cash_flows          — Manual income/expense tracking (auto-generated from transactions)
+  umkm_payments       — Tracks payments made to UMKM partners
 
 Views:
   products_cashier_view     — Cashier-safe view hiding harga_asli from non-admin roles
@@ -98,7 +102,7 @@ Views:
              ▼                                                        ▼
 ┌──────────────────────┐                                   ┌──────────────────────┐
 │ transaction_details  │                                   │    reconciliation    │
-│──────────────────────│                                   │──────────────────────│
+│──────────────────────│                                   │─────────────────────│
 │ id (PK)              │        ┌──────────────┐           │ id (PK)              │
 │ transaction_id (FK) ─│───────►│ transactions │           │ session_product_     │
 │ session_product_     │        │──────────────│           │   id (FK)            │
@@ -110,10 +114,24 @@ Views:
 │ subtotal_harga_asli  │        │ nominal_     │           │ created_at           │
 │ created_at           │        │   diterima   │           └──────────────────────┘
 └──────────────────────┘        │ kembalian    │
-                                │ metode_      │
-                                │   pembayaran │
-                                │ created_at   │
-                                └──────────────┘
+                                 │ metode_      │
+                                 │   pembayaran │
+                                 │ created_at   │
+                                 └──────────────┘
+                                       │
+                                       ▼
+                            ┌──────────────────────┐
+                            │     cash_flows        │
+                            │──────────────────────│
+                            │ id (PK)               │
+                            │ type (income/expense) │
+                            │ source (manual/txn)   │
+                            │ amount                │
+                            │ description           │
+                            │ session_id (FK)       │
+                            │ recorded_by           │
+                            │ created_at            │
+                            └──────────────────────┘
 ```
 
 ---
@@ -275,6 +293,92 @@ CREATE TABLE public.reconciliation (
 
 ---
 
+### 3.8 Table: `cash_flows`
+
+Manual income/expense tracking. Income automatically generated from transactions via trigger.
+
+```sql
+CREATE TABLE public.cash_flows (
+  id            UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  type          VARCHAR(20) NOT NULL CHECK (type IN ('income', 'expense')),
+  source        VARCHAR(20) NOT NULL CHECK (source IN ('transaction', 'manual', 'payment')),
+  amount        INTEGER     NOT NULL CHECK (amount > 0),
+  description   TEXT,
+  session_id    UUID        REFERENCES public.sessions(id) ON DELETE SET NULL,
+  recorded_by   UUID        REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+**Trigger — Auto-add income from transactions:**
+```sql
+CREATE OR REPLACE FUNCTION public.trigger_add_cash_flow_from_transaction()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.cash_flows (type, source, amount, description, session_id, recorded_by)
+  VALUES (
+    'income',
+    'transaction',
+    NEW.total_harga_jual,
+    'Penjualan sesi tanggal ' || (SELECT session_date FROM public.sessions WHERE id = NEW.session_id),
+    NEW.session_id,
+    NEW.cashier_id
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_cash_flow_from_transaction
+  AFTER INSERT ON public.transactions
+  FOR EACH ROW
+  EXECUTE FUNCTION public.trigger_add_cash_flow_from_transaction();
+```
+
+**Trigger — Auto-add expense from UMKM payments:**
+```sql
+CREATE OR REPLACE FUNCTION public.trigger_add_cash_flow_from_umkm_payment()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.cash_flows (type, source, amount, description, session_id, recorded_by)
+  VALUES (
+    'expense',
+    'payment',
+    NEW.amount,
+    'Pembayaran ke ' || (SELECT nama_umkm FROM public.umkm WHERE id = NEW.umkm_id),
+    NULL,
+    NEW.recorded_by
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_cash_flow_from_umkm_payment
+  AFTER INSERT ON public.umkm_payments
+  FOR EACH ROW
+  EXECUTE FUNCTION public.trigger_add_cash_flow_from_umkm_payment();
+```
+
+---
+
+### 3.9 Table: `umkm_payments`
+
+Tracks payments made to UMKM partners. Each row represents a payment transaction.
+
+```sql
+CREATE TABLE public.umkm_payments (
+  id            UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  umkm_id       UUID        NOT NULL REFERENCES public.umkm(id) ON DELETE RESTRICT,
+  amount        INTEGER     NOT NULL CHECK (amount > 0),
+  status        VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid')),
+  paid_at       TIMESTAMPTZ,
+  recorded_by   UUID        REFERENCES auth.users(id) ON DELETE SET NULL,
+  notes         TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+---
+
 ## 4. Database Functions (RPC)
 
 ### 4.1 `complete_transaction`
@@ -318,6 +422,157 @@ CREATE OR REPLACE FUNCTION public.get_product_stock_recommendation(
 RETURNS TABLE(recommendation INTEGER, s1_sold INTEGER, s2_sold INTEGER, s3_sold INTEGER);
 ```
 
+### 4.5 `add_cash_flow`
+
+Add manual cash flow. Source auto-determined: 'manual' if session_id is NULL, 'transaction' otherwise.
+
+```sql
+CREATE OR REPLACE FUNCTION public.add_cash_flow(
+  p_type VARCHAR(20),
+  p_amount INTEGER,
+  p_description TEXT,
+  p_session_id UUID DEFAULT NULL,
+  p_recorded_by UUID DEFAULT NULL
+)
+RETURNS TABLE(
+  id UUID,
+  type VARCHAR(20),
+  source VARCHAR(20),
+  amount INTEGER,
+  description TEXT,
+  session_id UUID,
+  recorded_by UUID,
+  created_at TIMESTAMPTZ
+);
+```
+
+### 4.6 `get_cash_flow_summary`
+
+Get total income, expense, and saldo for a date range.
+
+```sql
+CREATE OR REPLACE FUNCTION public.get_cash_flow_summary(
+  p_start_date DATE DEFAULT NULL,
+  p_end_date DATE DEFAULT NULL
+)
+RETURNS TABLE(
+  total_income BIGINT,
+  total_expense BIGINT,
+  saldo BIGINT
+);
+```
+
+### 4.7 `get_cash_flow_list`
+
+Get list of cash flows with optional date filter and pagination.
+
+```sql
+CREATE OR REPLACE FUNCTION public.get_cash_flow_list(
+  p_start_date DATE DEFAULT NULL,
+  p_end_date DATE DEFAULT NULL,
+  p_limit INTEGER DEFAULT 50,
+  p_offset INTEGER DEFAULT 0
+)
+RETURNS TABLE(
+  id UUID,
+  type VARCHAR(20),
+  source VARCHAR(20),
+  amount INTEGER,
+  description TEXT,
+  session_id UUID,
+  recorded_by UUID,
+  created_at TIMESTAMPTZ,
+  session_date DATE
+);
+```
+
+### 4.8 `get_cash_flow_count`
+
+Get total count for pagination.
+
+```sql
+CREATE OR REPLACE FUNCTION public.get_cash_flow_count(
+  p_start_date DATE DEFAULT NULL,
+  p_end_date DATE DEFAULT NULL
+)
+RETURNS TABLE(total_count BIGINT);
+```
+
+### 4.9 `get_umkm_payment_summary`
+
+Get total terutang per UMKM (all-time).
+
+```sql
+CREATE OR REPLACE FUNCTION public.get_umkm_payment_summary()
+RETURNS TABLE(
+  umkm_id UUID,
+  nama_umkm VARCHAR(100),
+  total_terutang BIGINT
+);
+```
+
+### 4.10 `mark_umkm_as_paid`
+
+Mark a UMKM payment as paid.
+
+```sql
+CREATE OR REPLACE FUNCTION public.mark_umkm_as_paid(
+  p_umkm_id UUID,
+  p_amount INTEGER,
+  p_notes TEXT DEFAULT NULL,
+  p_recorded_by UUID DEFAULT NULL
+)
+RETURNS TABLE(
+  id UUID,
+  umkm_id UUID,
+  amount INTEGER,
+  status VARCHAR(20),
+  paid_at TIMESTAMPTZ,
+  recorded_by UUID,
+  notes TEXT,
+  created_at TIMESTAMPTZ
+);
+```
+
+### 4.11 `get_umkm_payment_history`
+
+Get payment history for a specific UMKM.
+
+```sql
+CREATE OR REPLACE FUNCTION public.get_umkm_payment_history(
+  p_umkm_id UUID
+)
+RETURNS TABLE(
+  id UUID,
+  umkm_id UUID,
+  amount INTEGER,
+  status VARCHAR(20),
+  paid_at TIMESTAMPTZ,
+  recorded_by UUID,
+  notes TEXT,
+  created_at TIMESTAMPTZ
+);
+```
+
+### 4.12 `get_umkm_payment_history_all`
+
+Get all payment history with UMKM name.
+
+```sql
+CREATE OR REPLACE FUNCTION public.get_umkm_payment_history_all()
+RETURNS TABLE(
+  id UUID,
+  umkm_id UUID,
+  amount INTEGER,
+  status VARCHAR(20),
+  paid_at TIMESTAMPTZ,
+  recorded_by UUID,
+  notes TEXT,
+  created_at TIMESTAMPTZ,
+  nama_umkm VARCHAR(100)
+);
+```
+
 ---
 
 ## 5. Views
@@ -353,6 +608,8 @@ ALTER TABLE public.session_products   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transaction_details ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reconciliation      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.cash_flows          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.umkm_payments       ENABLE ROW LEVEL SECURITY;
 ```
 
 ---
@@ -368,6 +625,15 @@ CREATE INDEX idx_session_products_master ON public.session_products(master_produ
 CREATE INDEX idx_session_products_active ON public.session_products(session_id, is_active) WHERE is_active = TRUE;
 
 CREATE INDEX idx_td_session_product ON public.transaction_details(session_product_id);
+
+CREATE INDEX idx_cash_flows_session ON public.cash_flows(session_id);
+CREATE INDEX idx_cash_flows_created ON public.cash_flows(created_at);
+CREATE INDEX idx_cash_flows_type ON public.cash_flows(type);
+CREATE INDEX idx_cash_flows_source ON public.cash_flows(source);
+
+CREATE INDEX idx_umkm_payments_umkm ON public.umkm_payments(umkm_id);
+CREATE INDEX idx_umkm_payments_status ON public.umkm_payments(status);
+CREATE INDEX idx_umkm_payments_created ON public.umkm_payments(created_at);
 ```
 
 ---
@@ -377,4 +643,5 @@ CREATE INDEX idx_td_session_product ON public.transaction_details(session_produc
 ```sql
 ALTER PUBLICATION supabase_realtime ADD TABLE public.umkm;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.session_products;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.cash_flows;
 ```
