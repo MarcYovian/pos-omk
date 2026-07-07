@@ -13,6 +13,12 @@ const umkmName = ref('')
 const isLoading = ref(true)
 const products = ref<any[]>([])
 const sessions = ref<any[]>([])
+const sessionDetails = ref<Record<string, any[]>>({})
+const expandedSessions = ref<Record<string, boolean>>({})
+
+const toggleSession = (sessionId: string) => {
+  expandedSessions.value[sessionId] = !expandedSessions.value[sessionId]
+}
 
 const totalSoldAllTime = computed(() => products.value.reduce((acc, p) => acc + Number(p.total_terjual), 0))
 const totalRemittanceAllTime = computed(() => products.value.reduce((acc, p) => acc + Number(p.total_setoran), 0))
@@ -47,6 +53,56 @@ const loadData = async () => {
     
     if (sessErr) throw sessErr
     sessions.value = (sessData as any) || []
+
+    const { data: detailData, error: detailErr } = await supabase
+      .from('session_products')
+      .select(`
+        id,
+        session_id,
+        stok_awal,
+        stok_sekarang,
+        harga_asli,
+        master_product:master_products!inner(
+          nama_produk,
+          umkm_id
+        ),
+        reconciliation(
+          stok_fisik
+        )
+      `)
+      .eq('master_products.umkm_id', umkmId)
+
+    if (detailErr) throw detailErr
+
+    const groupedDetails: Record<string, any[]> = {}
+    for (const item of (detailData || [])) {
+      const sessId = item.session_id
+      if (!groupedDetails[sessId]) {
+        groupedDetails[sessId] = []
+      }
+
+      let phys = item.stok_sekarang
+      if (item.reconciliation) {
+        if (Array.isArray(item.reconciliation) && item.reconciliation.length > 0) {
+          phys = item.reconciliation[0].stok_fisik
+        } else if (!Array.isArray(item.reconciliation)) {
+          phys = (item.reconciliation as any).stok_fisik
+        }
+      }
+
+      const sold = item.stok_awal - phys
+
+      groupedDetails[sessId].push({
+        nama_produk: item.master_product.nama_produk,
+        stok_awal: item.stok_awal,
+        stok_sekarang: item.stok_sekarang,
+        stok_fisik: phys,
+        sold,
+        harga_asli: item.harga_asli,
+        total_setoran: sold * item.harga_asli
+      })
+    }
+    sessionDetails.value = groupedDetails
   } catch (e: any) {
     console.error('Gagal memuat data performa:', e)
   } finally {
@@ -182,10 +238,19 @@ onMounted(() => {
           
           <!-- Mobile: Card List -->
           <div class="block sm:hidden divide-y divide-slate-100">
-            <div v-for="s in sessions" :key="s.session_id" class="p-4 hover:bg-slate-50 transition">
+            <div 
+              v-for="s in sessions" 
+              :key="s.session_id" 
+              @click="toggleSession(s.session_id)"
+              class="p-4 hover:bg-slate-50 transition cursor-pointer"
+            >
               <div class="flex justify-between items-start mb-2">
-                <span class="text-sm font-bold text-slate-900 font-mono">
+                <span class="text-sm font-bold text-slate-900 font-mono flex items-center gap-1.5">
                   {{ new Date(s.session_date.replace(/-/g, '/')).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) }}
+                  <Icon 
+                    :name="expandedSessions[s.session_id] ? 'heroicons:chevron-up' : 'heroicons:chevron-down'" 
+                    class="w-3.5 h-3.5 text-slate-400"
+                  />
                 </span>
                 <span :class="['px-2.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border', s.status === 'closed' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-100']">
                   {{ s.status === 'closed' ? 'Selesai' : 'Aktif' }}
@@ -198,6 +263,22 @@ onMounted(() => {
               <div class="flex justify-between text-xs">
                 <span>Setoran Sesi</span>
                 <span class="font-black text-brand-900 tabular-nums">{{ useCurrencyFormat(s.total_setoran) }}</span>
+              </div>
+
+              <!-- Product breakdown for this session on mobile -->
+              <div v-if="expandedSessions[s.session_id]" class="mt-3 pt-3 border-t border-slate-150/80 bg-slate-50/50 p-2.5 rounded-xl flex flex-col gap-2" @click.stop>
+                <div class="text-[9px] font-black uppercase text-slate-400 tracking-wider mb-0.5">Detail Produk Sesi Ini</div>
+                <div v-for="det in sessionDetails[s.session_id]" :key="det.nama_produk" class="flex justify-between items-center text-xs border-b border-slate-100/50 pb-1.5 last:border-0 last:pb-0">
+                  <span class="font-bold text-slate-750">{{ det.nama_produk }}</span>
+                  <div class="text-right">
+                    <span class="font-mono text-slate-600 font-bold tabular-nums">{{ det.sold }} pcs</span>
+                    <span class="text-slate-350 mx-1">/</span>
+                    <span class="font-mono text-brand-900 font-extrabold tabular-nums">{{ useCurrencyFormat(det.total_setoran) }}</span>
+                  </div>
+                </div>
+                <div v-if="!sessionDetails[s.session_id] || sessionDetails[s.session_id].length === 0" class="text-center text-[10px] text-slate-400 py-1">
+                  Tidak ada rincian produk
+                </div>
               </div>
             </div>
             <div v-if="sessions.length === 0" class="p-8 text-center text-xs text-slate-400 font-medium">
@@ -214,21 +295,64 @@ onMounted(() => {
                   <th class="p-4 text-center">Status</th>
                   <th class="p-4 text-center">Terjual</th>
                   <th class="p-4 text-right text-brand-900">Setoran</th>
+                  <th class="p-4 w-10"></th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-medium text-slate-700">
-                <tr v-for="s in sessions" :key="s.session_id" class="hover:bg-slate-50/20">
-                  <td class="p-4 text-slate-900 font-bold font-mono">
-                    {{ new Date(s.session_date.replace(/-/g, '/')).toLocaleDateString('id-ID', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) }}
-                  </td>
-                  <td class="p-4 text-center">
-                    <span :class="['px-2.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border', s.status === 'closed' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-100']">
-                      {{ s.status === 'closed' ? 'Selesai' : 'Aktif' }}
-                    </span>
-                  </td>
-                  <td class="p-4 text-center font-mono text-slate-800 font-bold tabular-nums">{{ s.total_terjual }} pcs</td>
-                  <td class="p-4 text-right font-mono font-bold text-brand-950 bg-brand-50/5 tabular-nums">{{ useCurrencyFormat(s.total_setoran) }}</td>
-                </tr>
+                <template v-for="s in sessions" :key="s.session_id">
+                  <tr 
+                    @click="toggleSession(s.session_id)" 
+                    class="hover:bg-slate-50/20 cursor-pointer select-none transition-colors"
+                  >
+                    <td class="p-4 text-slate-900 font-bold font-mono">
+                      {{ new Date(s.session_date.replace(/-/g, '/')).toLocaleDateString('id-ID', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) }}
+                    </td>
+                    <td class="p-4 text-center">
+                      <span :class="['px-2.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border', s.status === 'closed' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-100']">
+                        {{ s.status === 'closed' ? 'Selesai' : 'Aktif' }}
+                      </span>
+                    </td>
+                    <td class="p-4 text-center font-mono text-slate-800 font-bold tabular-nums">{{ s.total_terjual }} pcs</td>
+                    <td class="p-4 text-right font-mono font-bold text-brand-950 bg-brand-50/5 tabular-nums">{{ useCurrencyFormat(s.total_setoran) }}</td>
+                    <td class="p-4 text-center text-slate-400">
+                      <Icon 
+                        :name="expandedSessions[s.session_id] ? 'heroicons:chevron-up' : 'heroicons:chevron-down'" 
+                        class="w-4 h-4"
+                      />
+                    </td>
+                  </tr>
+                  <!-- Expanded product detail sub-table -->
+                  <tr v-if="expandedSessions[s.session_id]">
+                    <td colspan="5" class="bg-slate-50/30 p-0 border-t border-b border-slate-100">
+                      <div class="px-8 py-4 bg-slate-50/50">
+                        <div class="text-[9px] font-black uppercase text-slate-400 tracking-wider mb-2.5">Rincian Per Produk Sesi Ini</div>
+                        <table class="w-full text-left text-xs font-medium text-slate-650">
+                          <thead>
+                            <tr class="text-[9px] text-slate-400 font-extrabold uppercase border-b border-slate-200">
+                              <th class="pb-2">Nama Produk</th>
+                              <th class="pb-2 text-center">Stok Awal</th>
+                              <th class="pb-2 text-center">Retur (Sisa)</th>
+                              <th class="pb-2 text-center">Terjual</th>
+                              <th class="pb-2 text-right text-brand-900">Setoran</th>
+                            </tr>
+                          </thead>
+                          <tbody class="divide-y divide-slate-100">
+                            <tr v-for="det in sessionDetails[s.session_id]" :key="det.nama_produk">
+                              <td class="py-2 text-slate-900 font-bold">{{ det.nama_produk }}</td>
+                              <td class="py-2 text-center font-mono tabular-nums text-slate-500">{{ det.stok_awal }}</td>
+                              <td class="py-2 text-center font-mono tabular-nums text-slate-500">{{ det.stok_fisik }}</td>
+                              <td class="py-2 text-center font-mono font-bold tabular-nums text-slate-800">{{ det.sold }} pcs</td>
+                              <td class="py-2 text-right font-mono font-bold tabular-nums text-brand-950">{{ useCurrencyFormat(det.total_setoran) }}</td>
+                            </tr>
+                            <tr v-if="!sessionDetails[s.session_id] || sessionDetails[s.session_id].length === 0">
+                              <td colspan="5" class="py-3 text-center text-slate-400">Tidak ada produk terdaftar pada sesi ini</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
               </tbody>
             </table>
           </div>
