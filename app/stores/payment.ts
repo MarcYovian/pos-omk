@@ -26,7 +26,15 @@ export const usePaymentStore = defineStore('payment', () => {
   const isLoading = ref(false)
   const error = ref<string | null>(null)
 
-  const totalTerutang = computed(() => summaries.value.reduce((sum, s) => sum + Number(s.total_terutang), 0))
+  const totalTerutang = computed(() => {
+    return summaries.value.reduce((sum, s) => {
+      const paid = history.value
+        .filter(h => h.umkm_id === s.umkm_id && h.status === 'paid')
+        .reduce((hSum, h) => hSum + h.amount, 0)
+      const unpaid = Number(s.total_terutang) - paid
+      return sum + (unpaid > 0 ? unpaid : 0)
+    }, 0)
+  })
 
   const fetchSummary = async () => {
     const supabase = useSupabase()

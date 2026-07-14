@@ -84,7 +84,7 @@ const loadData = async () => {
       let phys = item.stok_sekarang
       if (item.reconciliation) {
         if (Array.isArray(item.reconciliation) && item.reconciliation.length > 0) {
-          phys = item.reconciliation[0].stok_fisik
+          phys = (item.reconciliation[0] as any).stok_fisik
         } else if (!Array.isArray(item.reconciliation)) {
           phys = (item.reconciliation as any).stok_fisik
         }
@@ -276,7 +276,7 @@ onMounted(() => {
                     <span class="font-mono text-brand-900 font-extrabold tabular-nums">{{ useCurrencyFormat(det.total_setoran) }}</span>
                   </div>
                 </div>
-                <div v-if="!sessionDetails[s.session_id] || sessionDetails[s.session_id].length === 0" class="text-center text-[10px] text-slate-400 py-1">
+                <div v-if="!sessionDetails[s.session_id] || sessionDetails[s.session_id]?.length === 0" class="text-center text-[10px] text-slate-400 py-1">
                   Tidak ada rincian produk
                 </div>
               </div>
@@ -344,7 +344,7 @@ onMounted(() => {
                               <td class="py-2 text-center font-mono font-bold tabular-nums text-slate-800">{{ det.sold }} pcs</td>
                               <td class="py-2 text-right font-mono font-bold tabular-nums text-brand-950">{{ useCurrencyFormat(det.total_setoran) }}</td>
                             </tr>
-                            <tr v-if="!sessionDetails[s.session_id] || sessionDetails[s.session_id].length === 0">
+                            <tr v-if="!sessionDetails[s.session_id] || sessionDetails[s.session_id]?.length === 0">
                               <td colspan="5" class="py-3 text-center text-slate-400">Tidak ada produk terdaftar pada sesi ini</td>
                             </tr>
                           </tbody>
