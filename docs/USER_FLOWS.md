@@ -27,15 +27,23 @@
 ```
 /                        → Redirect to /pos (cashier) or /admin (admin) based on role
 /login                   → Login page (unauthenticated only)
+/change-password         → Change password [AUTH: authenticated]
+/reset-password          → Password recovery [AUTH: public with token]
 /pos                     → Cashier POS screen [AUTH: cashier + admin]
-/admin                   → Admin dashboard hub [AUTH: admin only]
+/admin                   → Admin overview dashboard [AUTH: admin only]
+/admin/history           → Session history & transaction audit logs [AUTH: admin only]
+/admin/analytics         → Sales trends & profit analytics charts [AUTH: admin only]
 /admin/umkm              → Master Data UMKM (CRU) [AUTH: admin only]
-/admin/umkm/[umkm_id]    → Master Products catalog (CRUD) [AUTH: admin only]
+/admin/umkm/[umkm_id]    → Master Products catalog & vendor stats [AUTH: admin only]
 /admin/setup             → Weekly session setup [AUTH: admin only]
 /admin/setup/[umkm_id]   → Session products allocation [AUTH: admin only]
-/admin/dashboard         → Revenue split dashboard [AUTH: admin only]
+/admin/dashboard         → Revenue split & session dashboard [AUTH: admin only]
+/admin/cash-flow         → Organizational cash flow ledger [AUTH: admin only]
+/admin/payments          → UMKM settlement payments [AUTH: admin only]
 /admin/reconciliation    → End-of-day stock reconciliation [AUTH: admin only]
 /admin/reports           → WhatsApp report generator [AUTH: admin only]
+/admin/users             → User & cashier management [AUTH: admin only]
+/umkm/performance/[id]   → Public vendor performance dashboard [PUBLIC: unauthenticated]
 ```
 
 **Route Guards (Nuxt middleware `auth.ts`):**
