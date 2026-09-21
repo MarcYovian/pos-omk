@@ -6,7 +6,14 @@ import AppButton from '~/components/ui/AppButton.vue'
 import AppInput from '~/components/ui/AppInput.vue'
 import AppModal from '~/components/ui/AppModal.vue'
 import AppToast from '~/components/ui/AppToast.vue'
-import ProfileDropdown from '~/components/ui/ProfileDropdown.vue'
+import type { 
+  UserRecord, 
+  RoleRecord, 
+  CreateUserResponse,
+  UserPermissionsResponse,
+  UserPermissionOverrideItem,
+  UpdateUserPermissionsBody
+} from '~/shared/types/users'
 
 definePageMeta({
   layout: 'admin',
@@ -18,6 +25,7 @@ const { addToast } = useToast()
 
 // State
 const users = ref<UserRecord[]>([])
+const availableRoles = ref<RoleRecord[]>([])
 const isLoading = ref(false)
 const searchQuery = ref('')
 
@@ -27,6 +35,7 @@ const filteredUsers = computed(() => {
   return users.value.filter(u => 
     u.email.toLowerCase().includes(query) || 
     u.role.toLowerCase().includes(query) ||
+    (u.role_name && u.role_name.toLowerCase().includes(query)) ||
     u.id.toLowerCase().includes(query)
   )
 })
@@ -34,7 +43,7 @@ const filteredUsers = computed(() => {
 // Modals
 const isCreateOpen = ref(false)
 const createEmail = ref('')
-const createRole = ref<'admin' | 'cashier'>('cashier')
+const createRole = ref<string>('cashier')
 const isCreating = ref(false)
 
 const createdPassword = ref('')
@@ -44,19 +53,39 @@ const isEditOpen = ref(false)
 const editingUser = ref<UserRecord | null>(null)
 const editEmail = ref('')
 const editPassword = ref('')
-const editRole = ref<'admin' | 'cashier'>('cashier')
+const editRole = ref<string>('cashier')
 const isUpdating = ref(false)
 
 const isDeleteOpen = ref(false)
 const deletingUser = ref<UserRecord | null>(null)
 const isDeleting = ref(false)
 
-// Fetch Users
+// User Permissions Override Modal State
+const isPermissionsModalOpen = ref(false)
+const isLoadingPermissions = ref(false)
+const isSavingPermissions = ref(false)
+const targetUserPermissions = ref<UserPermissionsResponse | null>(null)
+const selectedRoleForOverride = ref<string>('')
+const overrideItems = ref<UserPermissionOverrideItem[]>([])
+
+// Fetch Users & Roles
 const fetchUsers = async () => {
   isLoading.value = true
   try {
-    const data = await $fetch<UserRecord[]>('/api/users')
-    users.value = data
+    const [usersData, rolesData] = await Promise.all([
+      $fetch<UserRecord[]>('/api/users'),
+      $fetch<RoleRecord[]>('/api/roles').catch(() => [])
+    ])
+    users.value = usersData
+    if (rolesData && rolesData.length > 0) {
+      availableRoles.value = rolesData
+    } else {
+      // Fallback
+      availableRoles.value = [
+        { id: '1', code: 'admin', name: 'Administrator', description: '', is_system: true, permissions: [] },
+        { id: '2', code: 'cashier', name: 'Kasir', description: '', is_system: true, permissions: [] }
+      ]
+    }
   } catch (e: any) {
     addToast({ type: 'danger', message: e.message || 'Gagal memuat daftar pengguna' })
   } finally {
@@ -215,6 +244,53 @@ const handleToggleActive = async (user: UserRecord) => {
     isTogglingActive.value[user.id] = false
   }
 }
+
+// Open User Permissions Override Modal
+const handleOpenPermissions = async (user: UserRecord) => {
+  isLoadingPermissions.value = true
+  isPermissionsModalOpen.value = true
+  targetUserPermissions.value = null
+
+  try {
+    const res = await $fetch<UserPermissionsResponse>(`/api/users/${user.id}/permissions`)
+    targetUserPermissions.value = res
+    selectedRoleForOverride.value = res.role_code
+    overrideItems.value = res.permissions.map(p => ({ ...p }))
+  } catch (e: any) {
+    addToast({ type: 'danger', message: e.message || 'Gagal memuat izin pengguna' })
+    isPermissionsModalOpen.value = false
+  } finally {
+    isLoadingPermissions.value = false
+  }
+}
+
+const handleSavePermissions = async () => {
+  if (!targetUserPermissions.value) return
+
+  isSavingPermissions.value = true
+  try {
+    const payload: UpdateUserPermissionsBody = {
+      role_code: selectedRoleForOverride.value,
+      overrides: overrideItems.value.map(item => ({
+        permission_id: item.permission_id,
+        is_granted: item.is_granted
+      }))
+    }
+
+    await $fetch(`/api/users/${targetUserPermissions.value.user_id}/permissions`, {
+      method: 'PUT',
+      body: payload
+    })
+
+    addToast({ type: 'success', message: 'Kustomisasi hak akses berhasil disimpan' })
+    isPermissionsModalOpen.value = false
+    await fetchUsers()
+  } catch (e: any) {
+    addToast({ type: 'danger', message: e.message || 'Gagal menyimpan hak akses' })
+  } finally {
+    isSavingPermissions.value = false
+  }
+}
 </script>
 
 <template>
@@ -224,7 +300,7 @@ const handleToggleActive = async (user: UserRecord) => {
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-slate-150 p-4 rounded-2xl shadow-sm">
       <div>
         <h2 class="text-sm font-bold text-slate-800">Daftar Pengguna Sistem</h2>
-        <p class="text-xs text-slate-500 mt-0.5">Kelola akses kasir dan administrator</p>
+        <p class="text-xs text-slate-500 mt-0.5">Kelola akun pengguna, peran, dan kustomisasi izin</p>
       </div>
       <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
         <!-- Search Input -->
@@ -233,7 +309,7 @@ const handleToggleActive = async (user: UserRecord) => {
             v-model="searchQuery"
             type="text"
             placeholder="Cari email, role, atau ID..."
-            class="w-full text-xs font-semibold pl-8 pr-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 bg-slate-50/50"
+            class="w-full text-xs font-semibold pl-8 pr-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 bg-slate-50/50 min-h-touch"
           />
           <Icon name="heroicons:magnifying-glass" class="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
         </div>
@@ -241,7 +317,7 @@ const handleToggleActive = async (user: UserRecord) => {
           @click="handleOpenCreate"
           size="sm"
           variant="primary"
-          class="font-bold text-xs shadow-sm shrink-0"
+          class="font-bold text-xs shadow-sm shrink-0 min-h-touch"
         >
           Tambah User
         </AppButton>
@@ -249,7 +325,8 @@ const handleToggleActive = async (user: UserRecord) => {
     </div>
 
     <div v-if="isLoading" class="text-center py-12 text-slate-400">
-      Memuat daftar pengguna...
+      <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-brand-900 mb-2"></div>
+      <p>Memuat daftar pengguna...</p>
     </div>
 
     <div v-else-if="users.length === 0" class="text-center py-12 bg-white border border-slate-150 rounded-2xl shadow-sm text-slate-400">
@@ -281,12 +358,19 @@ const handleToggleActive = async (user: UserRecord) => {
           <p class="text-[10px] text-slate-400 font-semibold font-mono break-all">ID: {{ u.id }}</p>
           
           <!-- Badges -->
-          <div class="flex flex-wrap gap-2 mt-1">
+          <div class="flex flex-wrap gap-1.5 mt-1">
             <span
               class="text-[10px] font-bold px-2 py-0.5 rounded-full capitalize"
-              :class="u.role === 'admin' ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-green-50 text-green-700 border border-green-100'"
+              :class="u.role === 'admin' ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-brand-50 text-brand-900 border border-brand-100'"
             >
-              {{ u.role }}
+              {{ u.role_name || u.role }}
+            </span>
+            <span
+              v-if="u.custom_overrides_count && u.custom_overrides_count > 0"
+              class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-100"
+              title="Pengguna memiliki kustomisasi izin khusus"
+            >
+              {{ u.custom_overrides_count }} override
             </span>
             <span
               class="text-[10px] font-bold px-2 py-0.5 rounded-full"
@@ -314,6 +398,15 @@ const handleToggleActive = async (user: UserRecord) => {
 
           <!-- Action buttons -->
           <div class="flex items-center justify-end gap-1.5 border-t border-slate-50 pt-2.5 sm:border-t-0 sm:pt-0">
+            <!-- Permissions Override Button -->
+            <button
+              @click="handleOpenPermissions(u)"
+              class="p-1.5 text-slate-500 hover:text-brand-900 hover:bg-brand-50 border border-slate-150 bg-slate-50 rounded-lg transition min-h-[32px] min-w-[32px] flex items-center justify-center"
+              title="Kustomisasi Hak Akses (Izin)"
+            >
+              <Icon name="heroicons:shield-check" class="w-4.5 h-4.5" />
+            </button>
+
             <!-- Toggle active/inactive status (for marcellinusyovian@gmail.com only) -->
             <button
               v-if="authStore.user?.email === 'marcellinusyovian@gmail.com' && u.email !== 'marcellinusyovian@gmail.com'"
@@ -373,16 +466,14 @@ const handleToggleActive = async (user: UserRecord) => {
         
         <div class="flex flex-col gap-1.5">
           <label class="text-xs font-bold text-slate-500">Peran (Role)</label>
-          <div class="flex gap-4">
-            <label class="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
-              <input type="radio" v-model="createRole" value="cashier" class="accent-brand-900 w-4 h-4" />
-              <span>Kasir (Cashier)</span>
-            </label>
-            <label class="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
-              <input type="radio" v-model="createRole" value="admin" class="accent-brand-900 w-4 h-4" />
-              <span>Admin</span>
-            </label>
-          </div>
+          <select
+            v-model="createRole"
+            class="w-full text-xs font-semibold px-3 py-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 bg-white min-h-touch"
+          >
+            <option v-for="r in availableRoles" :key="r.id" :value="r.code">
+              {{ r.name }} ({{ r.code }})
+            </option>
+          </select>
         </div>
       </form>
       <template #footer>
@@ -409,7 +500,7 @@ const handleToggleActive = async (user: UserRecord) => {
           <p class="text-base font-mono font-black text-amber-900 tracking-wider select-all break-all">{{ createdPassword }}</p>
           <button
             @click="copyPassword"
-            class="mt-2 text-xs font-bold text-amber-700 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 self-start"
+            class="mt-2 text-xs font-bold text-amber-700 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 self-start min-h-touch"
           >
             <Icon name="heroicons:clipboard" class="w-3.5 h-3.5" />
             Salin Password
@@ -446,21 +537,118 @@ const handleToggleActive = async (user: UserRecord) => {
 
         <div class="flex flex-col gap-1.5">
           <label class="text-xs font-bold text-slate-500">Peran (Role)</label>
-          <div class="flex gap-4">
-            <label class="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
-              <input type="radio" v-model="editRole" value="cashier" class="accent-brand-900 w-4 h-4" />
-              <span>Kasir (Cashier)</span>
-            </label>
-            <label class="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
-              <input type="radio" v-model="editRole" value="admin" class="accent-brand-900 w-4 h-4" />
-              <span>Admin</span>
-            </label>
-          </div>
+          <select
+            v-model="editRole"
+            class="w-full text-xs font-semibold px-3 py-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 bg-white min-h-touch"
+          >
+            <option v-for="r in availableRoles" :key="r.id" :value="r.code">
+              {{ r.name }} ({{ r.code }})
+            </option>
+          </select>
         </div>
       </form>
       <template #footer>
         <AppButton variant="secondary" @click="isEditOpen = false">Batal</AppButton>
         <AppButton :loading="isUpdating" @click="handleEditSubmit">Simpan Perubahan</AppButton>
+      </template>
+    </AppModal>
+
+    <!-- Modal Kustomisasi Hak Akses (User Permission Override) -->
+    <AppModal
+      v-model="isPermissionsModalOpen"
+      :title="`Hak Akses: ${targetUserPermissions?.email || ''}`"
+      size="lg"
+    >
+      <div v-if="isLoadingPermissions" class="py-12 text-center text-slate-400">
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-brand-900 mb-2"></div>
+        <p class="text-sm">Memuat hak akses pengguna...</p>
+      </div>
+
+      <div v-else-if="targetUserPermissions" class="space-y-4 py-1">
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <div class="text-xs font-semibold text-slate-500">Peran Dasar Pengguna:</div>
+            <div class="text-sm font-bold text-slate-900">{{ targetUserPermissions.role_name }} ({{ targetUserPermissions.role_code }})</div>
+          </div>
+          <div class="text-xs text-slate-500">
+            Izin Aktif: <span class="font-bold text-brand-900">{{ targetUserPermissions.effective_permissions.length }}</span> modul
+          </div>
+        </div>
+
+        <div v-if="targetUserPermissions.role_code === 'admin'" class="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800">
+          <Icon name="heroicons:information-circle" class="w-4 h-4 mr-1 inline-block" />
+          Pengguna dengan peran Administrator otomatis memiliki izin penuh (superuser bypass).
+        </div>
+
+        <div class="border-t border-slate-200 pt-3">
+          <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Daftar Hak Akses & Kustomisasi Override:</h4>
+          
+          <div class="space-y-2 max-h-80 overflow-y-auto pr-1">
+            <div
+              v-for="item in overrideItems"
+              :key="item.permission_id"
+              class="p-3 rounded-xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+              :class="item.is_granted === true 
+                ? 'bg-emerald-50/70 border-emerald-200' 
+                : (item.is_granted === false 
+                  ? 'bg-red-50/70 border-red-200' 
+                  : 'bg-white border-slate-200')"
+            >
+              <div class="space-y-0.5">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-slate-900">{{ item.name }}</span>
+                  <code class="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{{ item.code }}</code>
+                  <span
+                    v-if="item.inherited_from_role"
+                    class="text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-semibold border border-blue-100"
+                  >
+                    Bawaan Peran
+                  </span>
+                </div>
+                <p class="text-[11px] text-slate-500 leading-snug">{{ item.module }}</p>
+              </div>
+
+              <!-- 3-State Override Selector -->
+              <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                <button
+                  type="button"
+                  @click="item.is_granted = null"
+                  class="text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition min-h-touch"
+                  :class="item.is_granted === null 
+                    ? 'bg-slate-800 text-white border-slate-800 shadow-sm' 
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'"
+                >
+                  Ikut Peran
+                </button>
+                <button
+                  type="button"
+                  @click="item.is_granted = true"
+                  class="text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition min-h-touch"
+                  :class="item.is_granted === true 
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm' 
+                    : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50'"
+                >
+                  Beri Izin
+                </button>
+                <button
+                  type="button"
+                  @click="item.is_granted = false"
+                  class="text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition min-h-touch"
+                  :class="item.is_granted === false 
+                    ? 'bg-red-600 text-white border-red-600 shadow-sm' 
+                    : 'bg-white text-red-700 border-red-200 hover:bg-red-50'"
+                >
+                  Cabut Izin
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <AppButton variant="secondary" @click="isPermissionsModalOpen = false">Batal</AppButton>
+        <AppButton :loading="isSavingPermissions" @click="handleSavePermissions">Simpan Hak Akses</AppButton>
       </template>
     </AppModal>
 

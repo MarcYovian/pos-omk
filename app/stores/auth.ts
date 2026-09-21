@@ -12,9 +12,22 @@ export const useAuthStore = defineStore('auth', () => {
       id: user.value.id || (user.value as any).sub
     }
   })
-  const role = ref<'admin' | 'cashier' | null>(null)
+
+  const role = ref<'admin' | 'cashier' | string | null>(null)
+  const permissions = ref<string[]>([])
   const isLoading = ref(false)
   const passwordChangeCompleted = ref(false)
+
+  const isSuperAdmin = computed(() => role.value === 'admin')
+
+  const can = (permissionCode: string): boolean => {
+    if (isSuperAdmin.value) return true
+    return permissions.value.includes(permissionCode)
+  }
+
+  const hasRole = (roleCode: string): boolean => {
+    return role.value === roleCode
+  }
 
   const needsPasswordChange = computed(() => {
     if (passwordChangeCompleted.value) return false
@@ -30,6 +43,27 @@ export const useAuthStore = defineStore('auth', () => {
     return (r === 'admin' || r === 'cashier') ? r : 'cashier'
   }
 
+  const fetchUserPermissions = async () => {
+    if (!user.value) {
+      permissions.value = []
+      return
+    }
+
+    if (typeof (supabase as any)?.rpc === 'function') {
+      try {
+        const userId = user.value.id || (user.value as any).sub
+        const { data, error } = await (supabase as any).rpc('get_user_effective_permissions', {
+          p_user_id: userId
+        })
+        if (!error && data) {
+          permissions.value = (data as Array<{ permission_code: string }>).map(p => p.permission_code)
+        }
+      } catch (e) {
+        console.warn('Gagal memuat izin pengguna:', e)
+      }
+    }
+  }
+
   const login = async (email: string, password: string) => {
     isLoading.value = true
     try {
@@ -42,7 +76,11 @@ export const useAuthStore = defineStore('auth', () => {
       }
 
       const userRole = data.user?.user_metadata?.role
-      role.value = (userRole === 'admin' || userRole === 'cashier') ? userRole : 'cashier'
+      role.value = (userRole === 'admin' || userRole === 'cashier' || userRole === 'treasurer' || userRole === 'stockkeeper') 
+        ? userRole 
+        : (userRole || 'cashier')
+
+      await fetchUserPermissions()
       return data
     } finally {
       isLoading.value = false
@@ -54,28 +92,36 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       await supabase.auth.signOut()
       role.value = null
+      permissions.value = []
       navigateTo('/login')
     } finally {
       isLoading.value = false
     }
   }
 
-  const initializeRole = () => {
+  const initializeRole = async () => {
     if (user.value) {
       const r = user.value.user_metadata?.role
       role.value = (r === 'admin' || r === 'cashier') ? r : 'cashier'
+      await fetchUserPermissions()
     } else {
       role.value = null
+      permissions.value = []
     }
   }
 
   return {
     user: currentUser,
     role,
+    permissions,
+    isSuperAdmin,
+    can,
+    hasRole,
     isLoading,
     needsPasswordChange,
     markPasswordChangeCompleted,
     getRole,
+    fetchUserPermissions,
     login,
     logout,
     initializeRole

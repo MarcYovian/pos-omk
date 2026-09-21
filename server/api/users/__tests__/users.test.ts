@@ -7,13 +7,16 @@ const mockSetResponseStatus = vi.fn()
 const mockGetRequestProtocol = vi.fn()
 const mockGetRequestHost = vi.fn()
 const mockRequireAdmin = vi.fn()
+const mockRequirePermission = vi.fn()
 const mockServerSupabaseServiceRole = vi.fn()
+const mockServerSupabaseUser = vi.fn()
 const mockGeneratePassword = vi.fn()
 
 vi.stubGlobal('generatePassword', mockGeneratePassword)
 
 vi.mock('#supabase/server', () => ({
   serverSupabaseServiceRole: (...args: unknown[]) => mockServerSupabaseServiceRole(...args),
+  serverSupabaseUser: (...args: unknown[]) => mockServerSupabaseUser(...args),
 }))
 
 vi.stubGlobal('defineEventHandler', (cb: Function) => cb)
@@ -24,6 +27,7 @@ vi.stubGlobal('setResponseStatus', mockSetResponseStatus)
 vi.stubGlobal('getRequestProtocol', mockGetRequestProtocol)
 vi.stubGlobal('getRequestHost', mockGetRequestHost)
 vi.stubGlobal('requireAdmin', mockRequireAdmin)
+vi.stubGlobal('requirePermission', mockRequirePermission)
 
 function mockEvent(overrides: Record<string, unknown> = {}) {
   return { context: {}, ...overrides } as any
@@ -37,6 +41,12 @@ function makeCreateError() {
     throw err
   }
 }
+
+beforeEach(() => {
+  mockRequireAdmin.mockResolvedValue({ id: 'admin-1', email: 'admin@test.com', user_metadata: { role: 'admin' } })
+  mockRequirePermission.mockResolvedValue({ id: 'admin-1', email: 'admin@test.com', user_metadata: { role: 'admin' } })
+  mockServerSupabaseUser.mockResolvedValue({ id: 'admin-1', email: 'admin@test.com', user_metadata: { role: 'admin' } })
+})
 
 describe('GET /api/users', () => {
   beforeEach(() => {
@@ -239,7 +249,7 @@ describe('POST /api/users', () => {
     expect(callArgs.email).toBe('newuser@test.com')
     expect(callArgs.password).toBeDefined()
     expect(typeof callArgs.password).toBe('string')
-    expect(callArgs.email_confirm).toBe(false)
+    expect(callArgs.email_confirm).toBe(true)
     expect(callArgs.user_metadata).toEqual({ role: 'cashier', is_active: true, force_password_change: true })
   })
 

@@ -135,4 +135,25 @@ describe('useAuthStore', () => {
       expect(auth.role).toBe('cashier')
     })
   })
+
+  describe('can and isSuperAdmin', () => {
+    it('returns true for any permission when role is admin (superuser bypass)', () => {
+      const auth = useAuthStore()
+      auth.role = 'admin'
+      expect(auth.isSuperAdmin).toBe(true)
+      expect(auth.can('pos:transact')).toBe(true)
+      expect(auth.can('roles:manage')).toBe(true)
+      expect(auth.can('nonexistent:perm')).toBe(true)
+    })
+
+    it('returns true only for granted permissions when role is not admin', () => {
+      const auth = useAuthStore()
+      auth.role = 'cashier'
+      auth.permissions = ['pos:transact']
+      expect(auth.isSuperAdmin).toBe(false)
+      expect(auth.can('pos:transact')).toBe(true)
+      expect(auth.can('cashflow:view')).toBe(false)
+    })
+  })
 })
+

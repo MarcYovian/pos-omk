@@ -15,6 +15,7 @@ interface NavItem {
   name: string
   path: string
   icon: string
+  permission?: string
   requiresSession?: boolean
   requiresClosedSession?: boolean
 }
@@ -29,59 +30,65 @@ const navGroups: NavGroup[] = [
     label: 'Umum',
     items: [
       { name: 'Ikhtisar', path: '/admin', icon: 'heroicons:squares-2x2' },
-      { name: 'Riwayat Sesi', path: '/admin/history', icon: 'heroicons:archive-box' },
-      { name: 'Analitik Sesi', path: '/admin/analytics', icon: 'heroicons:presentation-chart-line' },
+      { name: 'Riwayat Sesi', path: '/admin/history', icon: 'heroicons:archive-box', permission: 'cashflow:view' },
+      { name: 'Analitik Sesi', path: '/admin/analytics', icon: 'heroicons:presentation-chart-line', permission: 'cashflow:view' },
     ]
   },
   {
     label: 'UMKM & Produk',
     items: [
-      { name: 'Master Data UMKM', path: '/admin/umkm', icon: 'heroicons:building-storefront' },
-      { name: 'Setup Katalog', path: '/admin/setup', icon: 'heroicons:cog-8-tooth' },
+      { name: 'Master Data UMKM', path: '/admin/umkm', icon: 'heroicons:building-storefront', permission: 'products:manage' },
+      { name: 'Setup Katalog', path: '/admin/setup', icon: 'heroicons:cog-8-tooth', permission: 'session_stock:manage' },
     ]
   },
   {
     label: 'Keuangan',
     items: [
-      { name: 'Finansial Sesi', path: '/admin/dashboard', icon: 'heroicons:chart-bar', requiresSession: true },
-      { name: 'Cash Flow', path: '/admin/cash-flow', icon: 'heroicons:banknotes' },
-      { name: 'Pembayaran UMKM', path: '/admin/payments', icon: 'heroicons:currency-dollar' },
+      { name: 'Finansial Sesi', path: '/admin/dashboard', icon: 'heroicons:chart-bar', permission: 'cashflow:view', requiresSession: true },
+      { name: 'Cash Flow', path: '/admin/cash-flow', icon: 'heroicons:banknotes', permission: 'cashflow:view' },
+      { name: 'Pembayaran UMKM', path: '/admin/payments', icon: 'heroicons:currency-dollar', permission: 'umkm:payout' },
     ]
   },
   {
     label: 'Operasional',
     items: [
-      { name: 'Rekonsiliasi Stok', path: '/admin/reconciliation', icon: 'heroicons:clipboard-document-check', requiresSession: true },
-      { name: 'Laporan WhatsApp', path: '/admin/reports', icon: 'heroicons:chat-bubble-bottom-center-text', requiresClosedSession: true },
+      { name: 'Rekonsiliasi Stok', path: '/admin/reconciliation', icon: 'heroicons:clipboard-document-check', permission: 'session:manage', requiresSession: true },
+      { name: 'Laporan WhatsApp', path: '/admin/reports', icon: 'heroicons:chat-bubble-bottom-center-text', permission: 'reports:view', requiresClosedSession: true },
     ]
   },
   {
     label: 'Pengaturan',
     items: [
-      { name: 'Kelola Pengguna', path: '/admin/users', icon: 'heroicons:users' },
+      { name: 'Kelola Pengguna', path: '/admin/users', icon: 'heroicons:users', permission: 'users:manage' },
+      { name: 'Peran & Hak Akses', path: '/admin/roles', icon: 'heroicons:shield-check', permission: 'roles:manage' },
     ]
   }
 ]
 
 const filteredNavGroups = computed(() => {
-  return navGroups.map(group => ({
-    ...group,
-    items: group.items.map(item => {
-      let isDisabled = false
-      let tooltip = ''
+  return navGroups
+    .map(group => {
+      const visibleItems = group.items.filter(item => !item.permission || authStore.can(item.permission))
+      return {
+        ...group,
+        items: visibleItems.map(item => {
+          let isDisabled = false
+          let tooltip = ''
 
-      if (item.requiresSession && !sessionStore.currentSession) {
-        isDisabled = true
-        tooltip = 'Sesi harus aktif'
-      }
-      if (item.requiresClosedSession && !sessionStore.isClosed) {
-        isDisabled = true
-        tooltip = 'Sesi harus ditutup'
-      }
+          if (item.requiresSession && !sessionStore.currentSession) {
+            isDisabled = true
+            tooltip = 'Sesi harus aktif'
+          }
+          if (item.requiresClosedSession && !sessionStore.isClosed) {
+            isDisabled = true
+            tooltip = 'Sesi harus ditutup'
+          }
 
-      return { ...item, isDisabled, tooltip }
+          return { ...item, isDisabled, tooltip }
+        })
+      }
     })
-  }))
+    .filter(group => group.items.length > 0)
 })
 
 const currentPath = computed(() => route.path)
@@ -98,11 +105,15 @@ const pageTitle = computed(() => {
   if (route.path === '/admin/payments') return 'Pembayaran UMKM'
   if (route.path === '/admin/analytics') return 'Analitik Sesi'
   if (route.path === '/admin/users') return 'Kelola Pengguna'
+  if (route.path.startsWith('/admin/roles')) return 'Peran & Hak Akses'
   return 'Admin'
 })
 
-onMounted(() => {
+onMounted(async () => {
   sessionStore.fetchTodaySession()
+  if (authStore.permissions.length === 0 && !authStore.isSuperAdmin) {
+    await authStore.fetchUserPermissions()
+  }
 })
 
 const closeMobileMenu = () => {
