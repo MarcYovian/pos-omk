@@ -60,7 +60,8 @@ const navGroups: NavGroup[] = [
     label: 'Pengaturan',
     items: [
       { name: 'Kelola Pengguna', path: '/admin/users', icon: 'heroicons:users', permission: 'users:manage' },
-      { name: 'Peran & Hak Akses', path: '/admin/roles', icon: 'heroicons:shield-check', permission: 'roles:manage' },
+      { name: 'Manajemen Role', path: '/admin/roles', icon: 'heroicons:shield-check', permission: 'roles:manage' },
+      { name: 'Manajemen Permission', path: '/admin/permissions', icon: 'heroicons:key', permission: 'roles:manage' },
     ]
   }
 ]
@@ -105,7 +106,8 @@ const pageTitle = computed(() => {
   if (route.path === '/admin/payments') return 'Pembayaran UMKM'
   if (route.path === '/admin/analytics') return 'Analitik Sesi'
   if (route.path === '/admin/users') return 'Kelola Pengguna'
-  if (route.path.startsWith('/admin/roles')) return 'Peran & Hak Akses'
+  if (route.path.startsWith('/admin/roles')) return 'Manajemen Role'
+  if (route.path.startsWith('/admin/permissions')) return 'Manajemen Permission'
   return 'Admin'
 })
 
