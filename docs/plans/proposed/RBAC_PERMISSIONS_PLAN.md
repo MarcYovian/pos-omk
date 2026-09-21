@@ -1,25 +1,33 @@
-# RBAC (Role-Based Access Control) & User Permissions Implementation Plan
-# OMK POS — Consignment System
+# RBAC (Role-Based Access Control) & Granular Permissions Implementation Plan
+# OMK POS — Consignment & Cashier System
 
-> **Document Status:** DRAFT / PROPOSED  
+> **Document Status:** PROPOSED (Architectural Proposal)  
+> **Target Document Location:** `docs/plans/proposed/RBAC_PERMISSIONS_PLAN.md`  
 > **Target Release:** v3.1  
-> **Core Principles:** Zero-Downtime, Backward-Compatible, Layered Authorization
+> **Core Principles:** Zero-Downtime, Backward-Compatible, Strict Consignment Protection, Layered Authorization
 
 ---
 
-## 1. Background & Objectives
+## 1. Background & Governance Compliance
 
 ### 1.1 Current State
 - Authentication and authorization currently support only 2 fixed roles: `'admin'` and `'cashier'`.
-- Roles are stored in the JSONB column `raw_user_meta_data` on Supabase's internal `auth.users` table.
-- Database checks (RLS) and Nuxt server APIs rely on static evaluation of `role = 'admin'`.
-- There is no ability to grant specific modular access (e.g., a cashier who can view cash flow without altering inventory, or a treasurer who can settle UMKM payouts without access to admin account management).
+- Roles are stored in the JSONB column `raw_user_meta_data` on Supabase's internal `auth.users` table (`user_metadata.role`).
+- Database Row-Level Security (RLS) and Nuxt server Nitro APIs rely on static evaluation of `role = 'admin'`.
+- There is no ability to grant granular, modular access (e.g., a treasurer who settles UMKM payouts without access to cashier account creation, or an inventory manager who configures weekly catalogs without viewing ledger balances).
 
 ### 1.2 Objectives
-1. **Dynamic Roles:** Admins can dynamically create, edit, and delete custom roles from the dashboard.
-2. **Granular Permissions:** Define modular permissions (POS, Session, Catalog/Products, Cash Flow, UMKM Settlements, User Management).
-3. **User Overrides (`user_permissions`):** Support granting custom permissions or explicitly revoking permissions for individual users without needing to create new roles.
-4. **Seamless Migration (Zero Breakage):** Existing accounts must not experience session interruptions or errors during rollout.
+1. **Dynamic Roles:** Administrators can dynamically create, view, edit, and deactivate roles via a dedicated UI (`/admin/roles`).
+2. **Granular Permissions:** Modular permission codes mapped to specific features (POS, Catalog Setup, Stock Allocation, Financial Ledger, UMKM Settlements, User & Role Management).
+3. **User Overrides (`user_permissions`):** Support granting custom permissions or explicitly revoking permissions for individual users without needing to create bespoke roles.
+4. **Zero Downtime & Backward Compatibility:** Existing cashier and admin accounts must not experience session interruptions, login errors, or permission lockouts during schema rollout.
+
+### 1.3 Governance & Compliance with Locked Features
+Per [GEMINI.md Bagian 7 & 8](file:///home/rodex/Documents/cell/projects/pos-omk/GEMINI.md) and [docs/FEATURES.md](file:///home/rodex/Documents/cell/projects/pos-omk/docs/FEATURES.md), features **F-01 (Auth & RBAC)** and **F-14 (User Management)** are marked as **`LOCKED`**. This plan is formulated as an **authorized supervised extension**:
+- **Consignment Cost Isolation (`harga_asli`):** Cashier accounts remain **strictly forbidden** from querying `harga_asli`. Cashiers only access `products_cashier_view` with RLS enforcement.
+- **Atomic Checkout Preserved:** Checkout logic remains strictly encapsulated in the atomic database RPC `complete_transaction`.
+- **Superuser Fallback:** Any user with `user_metadata->>'role' = 'admin'` automatically bypasses permission checks as a superadmin, ensuring legacy admin sessions remain 100% operational.
+- **Design System Mandate:** No third-party UI libraries (PrimeVue, Vuetify, DaisyUI, etc.) or Axios are introduced. All new interfaces are built strictly with Tailwind CSS and atomic UI primitives (`AppButton`, `AppInput`, `AppModal`, `AppToast`).
 
 ---
 
@@ -38,7 +46,7 @@ erDiagram
 
     roles {
         uuid id PK
-        varchar code UK "admin, cashier, treasurer, coordinator"
+        varchar code UK "admin, cashier, treasurer, stockkeeper"
         varchar name "Role Display Name"
         text description "Role Description"
         boolean is_system "True = built-in system role (cannot be deleted)"
@@ -50,7 +58,7 @@ erDiagram
         uuid id PK
         varchar code UK "pos:transact, cashflow:manage"
         varchar name "Permission Name"
-        varchar module "pos, session, products, cashflow, umkm, users"
+        varchar module "pos, catalog, session, finance, reports, users"
         text description
         timestamptz created_at
     }
@@ -79,49 +87,51 @@ erDiagram
 
 ### 2.2 Modular Permission Definitions (*Seed Permissions*)
 
-Permissions are intentionally limited to ~10 modular items to prevent over-engineering:
+Permissions are mapped directly to the 14 project features in [docs/FEATURES.md](file:///home/rodex/Documents/cell/projects/pos-omk/docs/FEATURES.md) without over-engineering:
 
-| Module | Permission Code | Display Name | Description |
-|---|---|---|---|
-| **POS** | `pos:transact` | Cashier Checkout | Access cashier checkout & receipt printing |
-| **Session** | `session:manage` | Open & Close Session | Open Sunday sessions, enter reconciliation counts, close session |
-| | `session:reset` | Reset Session | Purge session transactions (restricted administrative access) |
-| **Catalog** | `products:manage` | Manage Master Catalog | Create/edit master products and UMKM partners |
-| | `session_stock:manage` | Allocate Session Stock | Configure weekly starting stock and retail selling price |
-| **Finance** | `cashflow:view` | View Cash Ledger | View cash flow list and ledger balance summary |
-| | `cashflow:manage` | Record Cash Entries | Enter starting cash balance or operational expenses |
-| | `umkm:payout` | Settle UMKM Payouts | Settle consignment remittances to UMKM partners |
-| **Users** | `users:manage` | Manage User Accounts | Create cashiers, reset passwords, toggle user active status |
-| | `roles:manage` | Manage Roles & Permissions | Configure role and permission mappings |
+| Module | Permission Code | Display Name | Target Features / Routes | Description |
+|---|---|---|---|---|
+| **POS** | `pos:transact` | Kasir POS | F-02 (`/pos`) | Mengoperasikan kasir, memilih produk, menerima pembayaran Cash/QRIS, dan cetak struk |
+| **Catalog** | `products:manage` | Master Produk & UMKM | F-04 (`/admin/umkm`) | Tambah, ubah, dan nonaktifkan mitra UMKM serta katalog master produk |
+| | `session_stock:manage` | Alokasi Stok Sesi | F-05 (`/admin/setup`) | Setup sesi mingguan, memilih produk aktif, menentukan harga jual, dan stok awal |
+| **Session** | `session:manage` | Operasional Sesi | F-05, F-07 (`/admin/reconciliation`) | Buka sesi Minggu, input rekonsiliasi fisik (*stok fisik*), dan tutup sesi (*Close Session*) |
+| | `session:reset` | Reset & Buka Ulang Sesi | F-06 (`/admin/dashboard`) | Buka kembali sesi ditutup atau reset data transaksi sesi untuk kebutuhan recovery |
+| **Finance** | `cashflow:view` | Lihat Finansial & Kas | F-06, F-09, F-10, F-11 | Melihat dashboard finansial, riwayat sesi, analitik grafik, dan buku kas |
+| | `cashflow:manage` | Kelola Buku Kas | F-11 (`/admin/cash-flow`) | Input pemasukan/pengeluaran kas operasional manual dan saldo awal kas |
+| | `umkm:payout` | Pembayaran UMKM | F-12 (`/admin/payments`) | Catat pelunasan bagi hasil konsinyasi ke mitra UMKM (otomatis mencatat beban kas) |
+| **Reports** | `reports:view` | Laporan WhatsApp | F-08 (`/admin/reports`) | Generate dan salin rekap laporan bagi hasil mitra UMKM ke clipboard |
+| **Settings** | `users:manage` | Kelola Pengguna | F-14 (`/admin/users`) | Buat akun kasir baru, reset password, dan aktif/nonaktifkan status pengguna |
+| | `roles:manage` | Kelola Peran & Izin | New (`/admin/roles`) | Konfigurasi hak akses peran dan kustomisasi perizinan per user |
 
 ---
 
 ### 2.3 Default System Roles Matrix
 
-| Permission | `admin` | `cashier` | `treasurer` (New) | `stockkeeper` (New) |
+| Permission | `admin` (System) | `cashier` (System) | `treasurer` (Bendahara) | `stockkeeper` (Logistik) |
 |---|:---:|:---:|:---:|:---:|
 | `pos:transact` | ✅ *(Bypass)* | ✅ | ❌ | ❌ |
-| `session:manage` | ✅ *(Bypass)* | ❌ | ❌ | ✅ |
-| `session:reset` | ✅ *(Bypass)* | ❌ | ❌ | ❌ |
 | `products:manage` | ✅ *(Bypass)* | ❌ | ❌ | ✅ |
 | `session_stock:manage` | ✅ *(Bypass)* | ❌ | ❌ | ✅ |
+| `session:manage` | ✅ *(Bypass)* | ❌ | ❌ | ✅ |
+| `session:reset` | ✅ *(Bypass)* | ❌ | ❌ | ❌ |
 | `cashflow:view` | ✅ *(Bypass)* | ❌ | ✅ | ❌ |
 | `cashflow:manage` | ✅ *(Bypass)* | ❌ | ✅ | ❌ |
 | `umkm:payout` | ✅ *(Bypass)* | ❌ | ✅ | ❌ |
+| `reports:view` | ✅ *(Bypass)* | ❌ | ✅ | ✅ |
 | `users:manage` | ✅ *(Bypass)* | ❌ | ❌ | ❌ |
 | `roles:manage` | ✅ *(Bypass)* | ❌ | ❌ | ❌ |
 
-> 👑 **Admin Superuser Shortcut:** Accounts with role `admin` automatically bypass permission checks, granting full access across all modules without individual permission evaluation.
+> 👑 **Admin Superuser Shortcut:** Pengguna dengan role `admin` secara otomatis melewati pengecekan perizinan (*bypass*), memiliki akses 100% penuh ke seluruh modul tanpa perlu evaluasi baris izin satu per satu.
 
 ---
 
 ## 3. Database-Level Authorization Engine
 
 ### 3.1 Function `public.authorize(p_permission TEXT)`
-Core function for RLS policies and RPC execution with hierarchical evaluation:
-1. Check `user_permissions` (direct user override: `is_granted = true` or `false`).
-2. Check `user_roles` ➜ `role_permissions`.
-3. **Legacy Fallback (Backward Compatibility):** If user has no entries in `user_roles`, evaluate token `auth.jwt() -> 'user_metadata' ->> 'role' = 'admin'`.
+Fungsi inti PostgreSQL untuk RLS policies dan eksekusi RPC dengan evaluasi bertingkat (*hierarchical precedence*):
+1. **Direct User Permission Override (`user_permissions`):** Mengecek apakah ada override eksplisit per pengguna (`is_granted = true` atau `false`). Override `false` dapat mencabut izin yang diwariskan dari role.
+2. **Role Permissions Evaluation (`user_roles` ➜ `role_permissions`):** Mengecek apakah role pengguna memiliki izin tersebut atau memiliki role `admin`.
+3. **Legacy Metadata Fallback (Zero Downtime Guarantee):** Jika data belum ter-backfill di tabel relasional, fallback mengecek JWT token `auth.jwt() -> 'user_metadata' ->> 'role' = 'admin'`.
 
 ```sql
 CREATE OR REPLACE FUNCTION public.authorize(p_permission TEXT)
@@ -138,7 +148,7 @@ BEGIN
     RETURN FALSE;
   END IF;
 
-  -- 1. Direct User Permission Override
+  -- 1. Direct User Permission Override (Precedence Tertinggi)
   SELECT up.is_granted INTO v_has_override
   FROM public.user_permissions up
   JOIN public.permissions p ON p.id = up.permission_id
@@ -148,20 +158,20 @@ BEGIN
     RETURN v_has_override;
   END IF;
 
-  -- 2. Role Permissions Evaluation
+  -- 2. Role Permissions Evaluation (Termasuk role 'admin' bypass)
   IF EXISTS (
     SELECT 1
     FROM public.user_roles ur
     JOIN public.roles r ON r.id = ur.role_id
-    JOIN public.role_permissions rp ON rp.role_id = r.id
-    JOIN public.permissions p ON p.id = rp.permission_id
+    LEFT JOIN public.role_permissions rp ON rp.role_id = r.id
+    LEFT JOIN public.permissions p ON p.id = rp.permission_id
     WHERE ur.user_id = v_user_id
       AND (r.code = 'admin' OR p.code = p_permission)
   ) THEN
     RETURN TRUE;
   END IF;
 
-  -- 3. Legacy Metadata Fallback
+  -- 3. Legacy Metadata Fallback (Backward Compatibility saat Deploy)
   IF (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin' THEN
     RETURN TRUE;
   END IF;
@@ -175,66 +185,128 @@ $$;
 
 ## 4. Application Layer Architecture (Nuxt & Pinia)
 
-### 4.1 Pinia Auth Store (`stores/auth.ts`)
-Add state and helpers for client-side permission evaluation:
+### 4.1 Pinia Auth Store (`app/stores/auth.ts`)
+Memperluas state dan helper untuk evaluasi izin di sisi klien:
 
 ```ts
-// Permissions assigned to currently authenticated user
+// State
 const permissions = ref<string[]>([])
+const isSuperAdmin = computed(() => role.value === 'admin')
 
-// Check permission helper
+// Helper evaluasi izin
 const can = (permissionCode: string): boolean => {
-  if (role.value === 'admin') return true
+  if (isSuperAdmin.value) return true
   return permissions.value.includes(permissionCode)
 }
 
-// Check role helper
+// Helper evaluasi role
 const hasRole = (roleCode: string): boolean => {
   return role.value === roleCode
 }
 ```
 
-### 4.2 Centralized Navigation (`app/config/navigation.ts`)
-Navigation items filtered dynamically based on user permissions:
+---
+
+### 4.2 Integrasi Navigasi Admin (`app/layouts/admin.vue`)
+Menyesuaikan struktur `navGroups` aktual di `admin.vue` dengan menambahkan properti `permission?: string`. Item menu difilter secara reaktif, dan grup yang seluruh itemnya tidak memiliki akses akan disembunyikan otomatis:
 
 ```ts
-export const adminNavigation = [
-  { label: 'POS Cashier', to: '/pos', permission: 'pos:transact' },
-  { label: 'Product Catalog', to: '/admin/products', permission: 'products:manage' },
-  { label: 'Sales Sessions', to: '/admin/sessions', permission: 'session:manage' },
-  { label: 'Cash Flow', to: '/admin/cashflow', permission: 'cashflow:view' },
-  { label: 'UMKM Settlements', to: '/admin/umkm-payments', permission: 'umkm:payout' },
-  { label: 'User Management', to: '/admin/users', permission: 'users:manage' },
-  { label: 'Roles & Permissions', to: '/admin/roles', permission: 'roles:manage' },
+interface NavItem {
+  name: string
+  path: string
+  icon: string
+  permission?: string             // [NEW] Kode izin RBAC
+  requiresSession?: boolean
+  requiresClosedSession?: boolean
+}
+
+interface NavGroup {
+  label: string
+  items: NavItem[]
+}
+
+const navGroups: NavGroup[] = [
+  {
+    label: 'Umum',
+    items: [
+      { name: 'Ikhtisar', path: '/admin', icon: 'heroicons:squares-2x2', permission: 'cashflow:view' },
+      { name: 'Riwayat Sesi', path: '/admin/history', icon: 'heroicons:archive-box', permission: 'cashflow:view' },
+      { name: 'Analitik Sesi', path: '/admin/analytics', icon: 'heroicons:presentation-chart-line', permission: 'cashflow:view' },
+    ]
+  },
+  {
+    label: 'UMKM & Produk',
+    items: [
+      { name: 'Master Data UMKM', path: '/admin/umkm', icon: 'heroicons:building-storefront', permission: 'products:manage' },
+      { name: 'Setup Katalog', path: '/admin/setup', icon: 'heroicons:cog-8-tooth', permission: 'session_stock:manage' },
+    ]
+  },
+  {
+    label: 'Keuangan',
+    items: [
+      { name: 'Finansial Sesi', path: '/admin/dashboard', icon: 'heroicons:chart-bar', permission: 'cashflow:view', requiresSession: true },
+      { name: 'Cash Flow', path: '/admin/cash-flow', icon: 'heroicons:banknotes', permission: 'cashflow:view' },
+      { name: 'Pembayaran UMKM', path: '/admin/payments', icon: 'heroicons:currency-dollar', permission: 'umkm:payout' },
+    ]
+  },
+  {
+    label: 'Operasional',
+    items: [
+      { name: 'Rekonsiliasi Stok', path: '/admin/reconciliation', icon: 'heroicons:clipboard-document-check', permission: 'session:manage', requiresSession: true },
+      { name: 'Laporan WhatsApp', path: '/admin/reports', icon: 'heroicons:chat-bubble-bottom-center-text', permission: 'reports:view', requiresClosedSession: true },
+    ]
+  },
+  {
+    label: 'Pengaturan',
+    items: [
+      { name: 'Kelola Pengguna', path: '/admin/users', icon: 'heroicons:users', permission: 'users:manage' },
+      { name: 'Peran & Hak Akses', path: '/admin/roles', icon: 'heroicons:shield-check', permission: 'roles:manage' }, // [NEW]
+    ]
+  }
 ]
+
+// Filter dinamis: Item disaring berdasarkan permission, grup kosong disembunyikan
+const authorizedNavGroups = computed(() => {
+  return navGroups
+    .map(group => ({
+      ...group,
+      items: group.items.filter(item => !item.permission || authStore.can(item.permission))
+    }))
+    .filter(group => group.items.length > 0)
+})
 ```
 
+---
+
 ### 4.3 Route Middleware (`app/middleware/permission.ts`)
-Guards against unauthorized direct URL navigation:
+Melindungi rute dari navigasi URL langsung:
 
 ```ts
 export default defineNuxtRouteMiddleware((to) => {
-  const auth = useAuthStore()
+  const authStore = useAuthStore()
   const requiredPerm = to.meta.permission as string | undefined
 
-  if (requiredPerm && !auth.can(requiredPerm)) {
+  if (requiredPerm && !authStore.can(requiredPerm)) {
+    // Jika tidak punya izin ke halaman admin tersebut, lempar ke POS atau halaman pertama yang diizinkan
     return navigateTo('/pos')
   }
 })
 ```
 
+---
+
 ### 4.4 Server Utilities (`server/utils/requirePermission.ts`)
-Protects Nitro backend API endpoints:
+Melindungi endpoint Nitro REST API dengan tetap mempertahankan kompatibilitas `requireAdmin.ts`:
 
 ```ts
 export async function requirePermission(event: H3Event, permission: string) {
   const user = await serverSupabaseUser(event)
   if (!user) throw createError({ status: 401, statusText: 'Unauthorized' })
 
-  // Admin bypass
+  // Admin superuser bypass
   if (user.user_metadata?.role === 'admin') return user
 
-  // Check user permission in DB
+  // Evaluasi izin via stored function authorize() atau query user_permissions/user_roles
   const hasPerm = await checkUserPermission(user.id, permission)
   if (!hasPerm) {
     throw createError({ status: 403, statusText: 'Forbidden: Insufficient Permissions' })
@@ -246,81 +318,97 @@ export async function requirePermission(event: H3Event, permission: string) {
 
 ---
 
-## 5. Directory Structure & SQL File Standardization
+### 4.5 Kepatuhan Desain Sistem & Ergonomi UI
+Mengikuti standar di [docs/ARCHITECTURE.md](file:///home/rodex/Documents/cell/projects/pos-omk/docs/ARCHITECTURE.md):
+- **Bebas Library Eksternal:** Seluruh komponen UI dibuat murni dengan Tailwind CSS. Dilarang menginstal PrimeVue, DaisyUI, Vuetify, dsb.
+- **Komponen Primitif:** Menggunakan `AppButton.vue` (loading state & variants), `AppInput.vue`, `AppModal.vue`, dan `AppToast.vue`.
+- **Target Sentuh Mobile:** Checkbox modul izin dan toggle user menggunakan batas minimal tap target **48×48px** (`min-h-touch`, `min-w-touch`).
+- **Palet Warna:** Navy `#1e3a5f` (`brand-900`) untuk header dan tombol utama, serta semantik `success`, `warning`, `danger` untuk status badge.
 
-All SQL files are standardized into Supabase-conventional directories:
+---
+
+## 5. Standarisasi File Migrasi SQL
+
+Sesuai standar Supabase CLI dan penataan repositori:
 
 ```
 pos-omk/
 ├── supabase/
-│   ├── migrations/                      # DDL Schemas & Sequential Migrations
-│   │   ├── 20260629130149_001_split_products.sql
-│   │   ├── 20260707124708_create_cash_flows.sql
-│   │   ├── 20260707131602_create_umkm_payments.sql
-│   │   ├── 20260920000000_initial_base_schema.sql
-│   │   └── 20260921000000_create_rbac_tables.sql    # [PLAN] New RBAC migration
-│   └── seeds/                           # Dummy / Test Datasets
-│       └── dev_seed.sql
+│   ├── migrations/                                  # DDL Schemas & Sequential Migrations
+│   │   └── 20260922000000_create_rbac_tables.sql    # [PLAN] Skrip migrasi RBAC & RLS
+│   └── seeds/
+│       └── dev_seed.sql                             # Seed data roles & modular permissions
+├── docs/
+│   ├── archive/
+│   │   └── migrations_v2/                           # Arsip migrasi historis v2
+│   └── plans/
+│       ├── completed/                               # PRD & plan selesai
+│       └── proposed/                                # Proposal masa depan (RBAC_PERMISSIONS_PLAN.md)
 ```
 
-**Naming Standards:**
-- All schema migration files reside in `supabase/migrations/` using format `<YYYYMMDDHHMMSS>_<descriptive_name>.sql`.
-- Seed and test datasets reside in `supabase/seeds/`.
+**Aturan Penamaan Migrasi:**
+- Berkas migrasi baru wajib berada di `supabase/migrations/` dengan format `<YYYYMMDDHHMMSS>_<nama_deskriptif>.sql`.
+- Berisi DDL tabel baru, default seeds, fungsi `authorize()`, update RLS policies, serta backfill script.
 
 ---
 
-## 6. Execution & Verification Roadmap
+## 6. Roadmap Eksekusi & Protokol Git
+
+Sesuai [GEMINI.md Bagian 10](file:///home/rodex/Documents/cell/projects/pos-omk/GEMINI.md#L159-L167), pelaksanaan plan ini wajib mematuhi aturan:
+1. **Branch Terpisah:** Wajib membuat branch baru dari `master` (misal: `feat/rbac-dynamic-permissions`). Dilarang bekerja atau push langsung ke `master`.
+2. **Conventional Commits:** Menggunakan format commit baku (`feat(rbac): ...`, `test(rbac): ...`, `docs(rbac): ...`).
+3. **Verifikasi Wajib:** Wajib lolos `npm test` dan `npm run build` sebelum push ke remote origin.
 
 ```mermaid
 graph TD
-    A[Phase 1: DB Migration & New Tables] --> B[Phase 2: Auto-Backfill Existing Users]
-    B --> C[Phase 3: Nitro Backend API Endpoints]
-    C --> D[Phase 4: Pinia Store & Navigation Updates]
-    D --> E[Phase 5: Roles & User Permissions UI]
-    E --> F[Phase 6: End-to-End Verification in Dev]
-    F --> G[Phase 7: Production Release Playbook]
+    A[Phase 1: DB Migration & Backfill di Dev] --> B[Phase 2: Nitro Server API Endpoints]
+    B --> C[Phase 3: Pinia Auth Store & Navigation Updates]
+    C --> D[Phase 4: Roles & User Permissions UI]
+    D --> E[Phase 5: Automated & Manual Testing in Dev]
+    E --> F[Phase 6: Production Zero-Downtime Rollout]
 ```
 
-### Phase 1 & 2: Database Migration & Auto-Backfill
-- [ ] Prepare migration file `supabase/migrations/20260921000000_create_rbac_tables.sql`.
-- [ ] Create tables: `roles`, `permissions`, `role_permissions`, `user_roles`, `user_permissions`.
-- [ ] Seed default permissions and initial system roles (`admin`, `cashier`, `treasurer`, `stockkeeper`).
-- [ ] Auto-backfill: Populate `user_roles` for all existing users in `auth.users` based on current metadata.
-- [ ] Deploy `authorize()` function and update RLS policies incrementally.
+### Phase 1: Database Migration & Auto-Backfill (Dev Supabase: `irnbpdhkjrjmxmsbntna`)
+- [ ] Buat file migrasi `supabase/migrations/20260922000000_create_rbac_tables.sql`.
+- [ ] Buat tabel: `roles`, `permissions`, `role_permissions`, `user_roles`, `user_permissions`.
+- [ ] Seed daftar permission awal dan default system roles (`admin`, `cashier`, `treasurer`, `stockkeeper`).
+- [ ] Buat skrip auto-backfill: Sinkronkan seluruh user dari `auth.users` ke `user_roles` berdasarkan `user_metadata.role`.
+- [ ] Implementasikan fungsi `public.authorize(p_permission)` dan pasang RLS policies.
 
-### Phase 3: Nitro Backend API
-- [ ] Implement `GET /api/roles` & `POST /api/roles` (role management).
-- [ ] Implement `GET /api/permissions` (list modules & permissions).
-- [ ] Implement `GET/PUT /api/users/[id]/permissions` (custom user overrides).
-- [ ] Update `GET /api/users` response to include active roles and permissions per user.
+### Phase 2: Nitro Backend API
+- [ ] Endpoint `GET /api/roles` & `POST /api/roles` (manajemen role).
+- [ ] Endpoint `GET /api/permissions` (daftar modul & izin).
+- [ ] Endpoint `GET /api/users/[id]/permissions` & `PUT /api/users/[id]/permissions` (user override).
+- [ ] Perbarui response `GET /api/users` agar menyertakan data role relasional dan override user.
 
-### Phase 4: Frontend Authorization
-- [ ] Update `app/stores/auth.ts` with `can()` helper and permission hydration on login.
-- [ ] Integrate permission checks into admin sidebar navigation.
-- [ ] Implement route protection middleware.
+### Phase 3: Frontend State & Navigation
+- [ ] Tambahkan state `permissions`, getter `can()`, dan hidrasi izin saat login di `app/stores/auth.ts`.
+- [ ] Integrasikan pengecekan `permission` di `navGroups` pada `app/layouts/admin.vue`.
+- [ ] Pasang middleware route guard `app/middleware/permission.ts`.
 
-### Phase 5: Roles & Permissions Management UI
-- [ ] Create `/admin/roles` page:
-  - Role list table.
-  - Create/edit role form with modular permission checkboxes.
-- [ ] Update `/admin/users` page:
-  - Dynamic role selection from `roles` table.
-  - "Custom Permissions Override" modal for specific users.
+### Phase 4: UI Manajemen Peran & Izin Pengguna
+- [ ] Buat halaman `/admin/roles`:
+  - Tabel daftar peran & badge tipe (`System` / `Custom`).
+  - Modal form buat/edit peran dengan grid checkbox izin per modul.
+- [ ] Perbarui halaman `/admin/users`:
+  - Dropdown pemilihan role dinamis (mengambil dari tabel `roles`).
+  - Modal "Kustomisasi Hak Akses" (*User Permission Override*) untuk grant/revoke izin spesifik per user.
 
-### Phase 6: Testing & Verification
-- [ ] Cashier login test: can access POS only, denied from cash ledger and user management.
-- [ ] Treasurer login test: can access cash flow and settlements, denied from POS and master catalog editing.
-- [ ] Admin login test: full 100% unrestricted access across all modules (bypass).
-- [ ] User override test: a cashier granted explicit `cashflow:view` override can access the Cash Flow page.
+### Phase 5: Pengujian & Verifikasi
+- [ ] **Uji Kasir:** Akun kasir hanya dapat mengakses `/pos`. Akses ke `/admin/*` otomatis dialihkan ke `/pos`.
+- [ ] **Uji Bendahara (`treasurer`):** Dapat membuka `/admin/cash-flow` dan `/admin/payments`, tetapi ditolak saat membuka `/admin/users` atau setup katalog.
+- [ ] **Uji Superadmin (`admin`):** Memiliki akses 100% tanpa hambatan (*bypass* penuh).
+- [ ] **Uji User Override:** Kasir yang diberi override `is_granted = true` untuk `cashflow:view` dapat melihat halaman Cash Flow tanpa mengubah role dasarnya.
+- [ ] Jalankan automated tests: `npm test` dan `npm run build`.
 
 ---
 
-## 7. Production Release Playbook (*Zero Downtime*)
+## 7. Playbook Rilis Produksi (*Zero Downtime*)
 
-1. **Run Database Migration in Production:**
-   Because `authorize()` includes a fallback to legacy metadata, applying the schema changes **will not disrupt** active user sessions.
-2. **Deploy Application Build (Nuxt/Nitro):**
-   Deploy frontend and backend builds.
-3. **Verify Admin Access:**
-   Confirm superadmin access to `/admin/roles` and all existing administration screens.
-4. **Complete.**
+1. **Jalankan Migrasi Database di Produksi:**
+   Karena fungsi `authorize()` memiliki fallback ke metadata lama (`user_metadata->>'role' = 'admin'`), penerapan skrip DDL dan backfill **tidak akan memutus** sesi pengguna aktif di kasir gereja.
+2. **Deploy Build Aplikasi (Nuxt & Nitro):**
+   Deploy build frontend dan server.
+3. **Verifikasi Akun Admin & Kasir:**
+   Pastikan admin dapat mengakses menu baru `/admin/roles` dan akun kasir bertransaksi lancar di `/pos`.
+4. **Selesai.**
