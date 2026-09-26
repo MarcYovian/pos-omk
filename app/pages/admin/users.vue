@@ -133,31 +133,44 @@ const resetPermissionOverride = (item: UserPermissionOverrideItem) => {
   item.is_granted = null
 }
 
+let inFlightUsersPromise: Promise<void> | null = null
+
 // Fetch Users & Roles
 const fetchUsers = async (silent: boolean = false) => {
+  if (inFlightUsersPromise) {
+    return inFlightUsersPromise
+  }
+
   if (!silent && users.value.length === 0) {
     isLoading.value = true
   }
-  try {
-    const [usersData, rolesData] = await Promise.all([
-      apiFetch<UserRecord[]>('/api/users'),
-      apiFetch<RoleRecord[]>('/api/roles').catch(() => [])
-    ])
-    users.value = usersData
-    if (rolesData && rolesData.length > 0) {
-      availableRoles.value = rolesData
-    } else {
-      // Fallback
-      availableRoles.value = [
-        { id: '1', code: 'admin', name: 'Administrator', description: '', is_system: true, permissions: [] },
-        { id: '2', code: 'cashier', name: 'Kasir', description: '', is_system: true, permissions: [] }
-      ]
+
+  inFlightUsersPromise = (async () => {
+    try {
+      const [usersData, rolesData] = await Promise.all([
+        apiFetch<UserRecord[]>('/api/users'),
+        apiFetch<RoleRecord[]>('/api/roles').catch(() => [])
+      ])
+      users.value = usersData
+      if (rolesData && rolesData.length > 0) {
+        availableRoles.value = rolesData
+      } else {
+        // Fallback
+        availableRoles.value = [
+          { id: '1', code: 'admin', name: 'Administrator', description: '', is_system: true, permissions: [] },
+          { id: '2', code: 'cashier', name: 'Kasir', description: '', is_system: true, permissions: [] }
+        ]
+      }
+    } catch (e: any) {
+      addToast({ type: 'danger', message: e.statusMessage || e.message || 'Gagal memuat daftar pengguna' })
+    } finally {
+      isLoading.value = false
     }
-  } catch (e: any) {
-    addToast({ type: 'danger', message: e.statusMessage || e.message || 'Gagal memuat daftar pengguna' })
-  } finally {
-    isLoading.value = false
-  }
+  })().finally(() => {
+    inFlightUsersPromise = null
+  })
+
+  return inFlightUsersPromise
 }
 
 onMounted(() => {

@@ -14,6 +14,7 @@ const cacheStore = new Map<string, CacheEntry<any>>()
 export const RBAC_CACHE_TTL = {
   AUTH_TOKEN: 60,       // 60s for verified auth tokens
   USER_PERMS: 120,      // 120s for user effective permissions
+  USERS_LIST: 120,      // 120s for users list
   ROLES_CATALOG: 300,   // 300s (5m) for system roles
   PERMS_CATALOG: 300,   // 300s (5m) for master permissions catalog
 } as const
@@ -135,15 +136,41 @@ export function setCachedPermissionsCatalog(perms: any[], ttlSeconds: number = R
   cacheSet('rbac:perms_catalog', perms, ttlSeconds)
 }
 
+// 5. Users List Cache
+export function getCachedUsers(): any[] | null {
+  return cacheGet<any[]>('rbac:users_list')
+}
+
+export function setCachedUsers(users: any[], ttlSeconds: number = RBAC_CACHE_TTL.USERS_LIST) {
+  cacheSet('rbac:users_list', users, ttlSeconds)
+}
+
+// 6. User Permissions Detail Cache
+export function getCachedUserPermissionsDetail(userId: string): any | null {
+  return cacheGet<any>(`rbac:user_perms_detail:${userId}`)
+}
+
+export function setCachedUserPermissionsDetail(userId: string, data: any, ttlSeconds: number = RBAC_CACHE_TTL.USER_PERMS) {
+  cacheSet(`rbac:user_perms_detail:${userId}`, data, ttlSeconds)
+}
+
 // -------------------------------------------------------------
 // Invalidation Helpers (Event-Driven)
 // -------------------------------------------------------------
 
 /**
- * Invalidate cache for a specific user (effective permissions and cached tokens).
+ * Invalidate cached users list.
+ */
+export function invalidateUsersCache(): void {
+  cacheDelete('rbac:users_list')
+}
+
+/**
+ * Invalidate cache for a specific user (effective permissions, detail, and cached tokens).
  */
 export function invalidateUserCache(userId: string): void {
   cacheDelete(`rbac:user_perms:${userId}`)
+  cacheDelete(`rbac:user_perms_detail:${userId}`)
   // Purge any tokens associated with this user
   for (const [key, entry] of cacheStore.entries()) {
     if (key.startsWith('auth:token:') && entry.value?.id === userId) {
@@ -153,19 +180,22 @@ export function invalidateUserCache(userId: string): void {
 }
 
 /**
- * Invalidate roles catalog and all user permissions.
+ * Invalidate roles catalog, all user permissions, and user list.
  * Modifying or deleting a role affects all users who inherit that role.
  */
 export function invalidateRolesCache(): void {
   cacheDelete('rbac:roles_catalog')
+  cacheDelete('rbac:users_list')
   cacheDeletePrefix('rbac:user_perms:')
+  cacheDeletePrefix('rbac:user_perms_detail:')
 }
 
 /**
- * Invalidate permissions catalog.
+ * Invalidate permissions catalog and user permissions detail cache.
  */
 export function invalidatePermissionsCatalogCache(): void {
   cacheDelete('rbac:perms_catalog')
+  cacheDeletePrefix('rbac:user_perms_detail:')
 }
 
 /**

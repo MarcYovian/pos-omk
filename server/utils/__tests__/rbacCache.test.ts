@@ -12,6 +12,11 @@ import {
   setCachedRoles,
   getCachedPermissionsCatalog,
   setCachedPermissionsCatalog,
+  getCachedUsers,
+  setCachedUsers,
+  getCachedUserPermissionsDetail,
+  setCachedUserPermissionsDetail,
+  invalidateUsersCache,
   invalidateUserCache,
   invalidateRolesCache,
   invalidatePermissionsCatalogCache,
@@ -102,37 +107,63 @@ describe('rbacCache', () => {
       setCachedPermissionsCatalog(perms, 300)
       expect(getCachedPermissionsCatalog()).toEqual(perms)
     })
+
+    it('caches and retrieves users list', () => {
+      const users = [{ id: 'u1', email: 'u1@test.com', role: 'admin' }]
+      setCachedUsers(users, 120)
+      expect(getCachedUsers()).toEqual(users)
+    })
+
+    it('caches and retrieves user permissions detail', () => {
+      const detail = { user_id: 'u1', email: 'u1@test.com', permissions: [] }
+      setCachedUserPermissionsDetail('u1', detail, 120)
+      expect(getCachedUserPermissionsDetail('u1')).toEqual(detail)
+    })
   })
 
   describe('Event-Driven Cache Invalidation', () => {
+    it('invalidates users list', () => {
+      setCachedUsers([{ id: 'u1' }])
+      invalidateUsersCache()
+      expect(getCachedUsers()).toBeNull()
+    })
+
     it('invalidates specific user cache and associated tokens', () => {
       setCachedUserPermissions('user-1', ['pos:transact'])
+      setCachedUserPermissionsDetail('user-1', { user_id: 'user-1' })
       setCachedUser('tok-u1', { id: 'user-1', email: 'u1@test.com' })
       setCachedUser('tok-u2', { id: 'user-2', email: 'u2@test.com' })
 
       invalidateUserCache('user-1')
 
       expect(getCachedUserPermissions('user-1')).toBeNull()
+      expect(getCachedUserPermissionsDetail('user-1')).toBeNull()
       expect(getCachedUser('tok-u1')).toBeNull()
       expect(getCachedUser('tok-u2')).toEqual({ id: 'user-2', email: 'u2@test.com' })
     })
 
-    it('invalidates roles catalog and all user permissions', () => {
+    it('invalidates roles catalog, users list, and all user permissions', () => {
       setCachedRoles([{ id: 'r1' }])
+      setCachedUsers([{ id: 'u1' }])
       setCachedUserPermissions('u1', ['pos:transact'])
+      setCachedUserPermissionsDetail('u1', { user_id: 'u1' })
       setCachedUserPermissions('u2', ['cashflow:view'])
 
       invalidateRolesCache()
 
       expect(getCachedRoles()).toBeNull()
+      expect(getCachedUsers()).toBeNull()
       expect(getCachedUserPermissions('u1')).toBeNull()
+      expect(getCachedUserPermissionsDetail('u1')).toBeNull()
       expect(getCachedUserPermissions('u2')).toBeNull()
     })
 
-    it('invalidates permissions catalog', () => {
+    it('invalidates permissions catalog and user permissions detail', () => {
       setCachedPermissionsCatalog([{ id: 'p1' }])
+      setCachedUserPermissionsDetail('u1', { user_id: 'u1' })
       invalidatePermissionsCatalogCache()
       expect(getCachedPermissionsCatalog()).toBeNull()
+      expect(getCachedUserPermissionsDetail('u1')).toBeNull()
     })
   })
 

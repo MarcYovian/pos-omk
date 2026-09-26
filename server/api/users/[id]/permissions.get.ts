@@ -1,11 +1,19 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import type { UserPermissionsResponse, UserPermissionOverrideItem } from '~/shared/types/users'
+import { getCachedUserPermissionsDetail, setCachedUserPermissionsDetail } from '../../../utils/rbacCache'
 
 export default defineEventHandler(async (event) => {
   await requirePermission(event, 'users:manage')
 
   const userId = getRouterParam(event, 'id')
   if (!userId) throw createError({ status: 400, statusText: 'User ID wajib disertakan' })
+
+  setHeader(event, 'Cache-Control', 'private, max-age=60, stale-while-revalidate=120')
+
+  const cached = getCachedUserPermissionsDetail(userId)
+  if (cached) {
+    return cached as UserPermissionsResponse
+  }
 
   const client = serverSupabaseServiceRole(event)
 
@@ -92,5 +100,6 @@ export default defineEventHandler(async (event) => {
     permissions: permissionsList,
   }
 
+  setCachedUserPermissionsDetail(userId, response)
   return response
 })

@@ -1,6 +1,6 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import type { UpdateUserPermissionsBody } from '~/shared/types/users'
-import { invalidateUserCache } from '../../../utils/rbacCache'
+import { invalidateUserCache, invalidateUsersCache } from '../../../utils/rbacCache'
 
 export default defineEventHandler(async (event) => {
   await requirePermission(event, 'users:manage')
@@ -72,6 +72,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  invalidateUsersCache()
   invalidateUserCache(userId)
   return { success: true }
 })

@@ -1,5 +1,6 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import type { CreateUserBody } from '~/shared/types/users'
+import { invalidateUsersCache } from '../../utils/rbacCache'
 
 export default defineEventHandler(async (event) => {
   await requirePermission(event, 'users:manage')
@@ -72,6 +73,7 @@ export default defineEventHandler(async (event) => {
     console.warn('User created but failed to generate reset link:', resetError.message)
   }
 
+  invalidateUsersCache()
   setResponseStatus(event, 201)
   return {
     id: data.user.id,

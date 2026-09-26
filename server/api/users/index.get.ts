@@ -1,8 +1,16 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import type { UserRecord } from '~/shared/types/users'
+import { getCachedUsers, setCachedUsers } from '../../utils/rbacCache'
 
 export default defineEventHandler(async (event) => {
   await requireAdmin(event)
+
+  setHeader(event, 'Cache-Control', 'private, max-age=60, stale-while-revalidate=120')
+
+  const cached = getCachedUsers()
+  if (cached) {
+    return cached as UserRecord[]
+  }
 
   const client = serverSupabaseServiceRole(event)
   const { data, error } = await client.auth.admin.listUsers()
@@ -69,5 +77,6 @@ export default defineEventHandler(async (event) => {
     } satisfies UserRecord
   })
 
+  setCachedUsers(users)
   return users
 })

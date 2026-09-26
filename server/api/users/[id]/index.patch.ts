@@ -1,5 +1,6 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import type { UpdateUserBody } from '~/shared/types/users'
+import { invalidateUsersCache, invalidateUserCache } from '../../../utils/rbacCache'
 
 export default defineEventHandler(async (event) => {
   await requireAdmin(event)
@@ -70,5 +71,7 @@ export default defineEventHandler(async (event) => {
 
   if (error) throw createError({ status: 500, statusText: error.message })
 
+  invalidateUsersCache()
+  invalidateUserCache(userId)
   return { success: true }
 })

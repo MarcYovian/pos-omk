@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { clearAllRbacCache } from '../../../utils/rbacCache'
 
 const mockCreateError = vi.fn()
 const mockReadBody = vi.fn()
@@ -11,8 +12,10 @@ const mockRequirePermission = vi.fn()
 const mockServerSupabaseServiceRole = vi.fn()
 const mockServerSupabaseUser = vi.fn()
 const mockGeneratePassword = vi.fn()
+const mockSetHeader = vi.fn()
 
 vi.stubGlobal('generatePassword', mockGeneratePassword)
+vi.stubGlobal('setHeader', mockSetHeader)
 
 vi.mock('#supabase/server', () => ({
   serverSupabaseServiceRole: (...args: unknown[]) => mockServerSupabaseServiceRole(...args),
@@ -43,6 +46,7 @@ function makeCreateError() {
 }
 
 beforeEach(() => {
+  clearAllRbacCache()
   mockRequireAdmin.mockResolvedValue({ id: 'admin-1', email: 'admin@test.com', user_metadata: { role: 'admin' } })
   mockRequirePermission.mockResolvedValue({ id: 'admin-1', email: 'admin@test.com', user_metadata: { role: 'admin' } })
   mockServerSupabaseUser.mockResolvedValue({ id: 'admin-1', email: 'admin@test.com', user_metadata: { role: 'admin' } })
@@ -99,6 +103,38 @@ describe('GET /api/users', () => {
       role: 'admin',
       is_active: true,
     })
+  })
+
+  it('serves cached users on subsequent calls without querying Supabase again', async () => {
+    const fakeUsers = [
+      {
+        id: 'user-1',
+        email: 'cashier@test.com',
+        user_metadata: { role: 'cashier', is_active: true },
+        created_at: '2025-01-01T00:00:00Z',
+        last_sign_in_at: null,
+        email_confirmed_at: null,
+      },
+    ]
+    const listUsersMock = vi.fn().mockResolvedValue({ data: { users: fakeUsers }, error: null })
+    const mockClient = {
+      auth: { admin: { listUsers: listUsersMock } },
+    }
+    mockServerSupabaseServiceRole.mockReturnValue(mockClient)
+
+    const handler = (await import('../index.get')).default
+    const event = mockEvent()
+
+    // 1st call: cache miss
+    const res1 = await handler(event)
+    expect(res1).toHaveLength(1)
+    expect(listUsersMock).toHaveBeenCalledTimes(1)
+    expect(mockSetHeader).toHaveBeenCalledWith(event, 'Cache-Control', 'private, max-age=60, stale-while-revalidate=120')
+
+    // 2nd call: cache hit
+    const res2 = await handler(event)
+    expect(res2).toEqual(res1)
+    expect(listUsersMock).toHaveBeenCalledTimes(1)
   })
 
   it('defaults role to cashier when metadata role is invalid', async () => {
@@ -750,5 +786,160 @@ describe('POST /api/users/[id]/password-changed', () => {
 
     const handler = (await import('../[id]/password-changed.post')).default
     await expect(handler(mockEvent())).rejects.toThrow('Update failed')
+  })
+})
+
+describe('GET /api/users/[id]/permissions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearAllRbacCache()
+    mockCreateError.mockImplementation(makeCreateError())
+    mockRequirePermission.mockResolvedValue({ id: 'admin-1', email: 'admin@test.com' })
+    mockGetRouterParam.mockReturnValue('user-123')
+  })
+
+  it('returns permissions detail and caches response', async () => {
+    const getUserByIdMock = vi.fn().mockResolvedValue({
+      data: { user: { id: 'user-123', email: 'cashier@test.com', user_metadata: { role: 'cashier' } } },
+      error: null,
+    })
+
+    const mockClient = {
+      auth: { admin: { getUserById: getUserByIdMock } },
+      from: vi.fn((table: string) => {
+        if (table === 'user_roles') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: {
+                    roles: {
+                      id: 'role-cashier',
+                      code: 'cashier',
+                      name: 'Kasir',
+                      role_permissions: [{ permissions: { code: 'pos:transact' } }],
+                    },
+                  },
+                }),
+              }),
+            }),
+          }
+        }
+        if (table === 'user_permissions') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockResolvedValue({
+                data: [{ permission_id: 'p2', is_granted: true }],
+              }),
+            }),
+          }
+        }
+        if (table === 'permissions') {
+          return {
+            select: vi.fn().mockReturnValue({
+              order: vi.fn().mockReturnValue({
+                order: vi.fn().mockResolvedValue({
+                  data: [
+                    { id: 'p1', code: 'pos:transact', name: 'Transaksi', module: 'pos', description: '' },
+                    { id: 'p2', code: 'reports:view', name: 'Laporan', module: 'reports', description: '' },
+                  ],
+                }),
+              }),
+            }),
+          }
+        }
+        return {}
+      }),
+      rpc: vi.fn().mockResolvedValue({
+        data: [{ permission_code: 'pos:transact' }, { permission_code: 'reports:view' }],
+      }),
+    }
+    mockServerSupabaseServiceRole.mockReturnValue(mockClient)
+
+    const handler = (await import('../[id]/permissions.get')).default
+    const event = mockEvent()
+
+    // 1st call: cache miss
+    const res1 = await handler(event)
+    expect(res1.user_id).toBe('user-123')
+    expect(res1.role_code).toBe('cashier')
+    expect(res1.effective_permissions).toEqual(['pos:transact', 'reports:view'])
+    expect(getUserByIdMock).toHaveBeenCalledTimes(1)
+    expect(mockSetHeader).toHaveBeenCalledWith(event, 'Cache-Control', 'private, max-age=60, stale-while-revalidate=120')
+
+    // 2nd call: cache hit
+    const res2 = await handler(event)
+    expect(res2).toEqual(res1)
+    expect(getUserByIdMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('PUT /api/users/[id]/permissions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearAllRbacCache()
+    mockCreateError.mockImplementation(makeCreateError())
+    mockRequirePermission.mockResolvedValue({ id: 'admin-1', email: 'admin@test.com' })
+    mockGetRouterParam.mockReturnValue('user-123')
+  })
+
+  it('updates permissions and invalidates cache', async () => {
+    mockReadBody.mockResolvedValue({
+      role_code: 'cashier',
+      overrides: [{ permission_id: 'p2', is_granted: true }],
+    })
+
+    const upsertMock = vi.fn().mockResolvedValue({ error: null })
+    const mockClient = {
+      auth: {
+        admin: {
+          getUserById: vi.fn().mockResolvedValue({
+            data: { user: { id: 'user-123', email: 'cashier@test.com' } },
+            error: null,
+          }),
+          updateUserById: vi.fn().mockResolvedValue({ error: null }),
+        },
+      },
+      from: vi.fn((table: string) => {
+        if (table === 'roles') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: { id: 'role-c', code: 'cashier' },
+                  error: null,
+                }),
+              }),
+            }),
+          }
+        }
+        if (table === 'user_roles') {
+          return {
+            upsert: vi.fn().mockResolvedValue({ error: null }),
+            delete: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                neq: vi.fn().mockResolvedValue({ error: null }),
+              }),
+            }),
+          }
+        }
+        if (table === 'user_permissions') {
+          return {
+            upsert: upsertMock,
+          }
+        }
+        return {}
+      }),
+    }
+    mockServerSupabaseServiceRole.mockReturnValue(mockClient)
+
+    const handler = (await import('../[id]/permissions.put')).default
+    const result = await handler(mockEvent())
+
+    expect(result).toEqual({ success: true })
+    expect(upsertMock).toHaveBeenCalledWith(
+      { user_id: 'user-123', permission_id: 'p2', is_granted: true },
+      { onConflict: 'user_id,permission_id' }
+    )
   })
 })

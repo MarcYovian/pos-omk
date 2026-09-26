@@ -1,5 +1,5 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
-import { invalidateUserCache } from '../../../utils/rbacCache'
+import { invalidateUserCache, invalidateUsersCache } from '../../../utils/rbacCache'
 
 const SUPER_ADMIN_EMAIL = 'marcellinusyovian@gmail.com'
 
@@ -34,6 +34,7 @@ export default defineEventHandler(async (event) => {
 
   if (error) throw createError({ status: 500, statusText: error.message })
 
+  invalidateUsersCache()
   invalidateUserCache(userId)
   return { success: true }
 })
