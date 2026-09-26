@@ -7,11 +7,14 @@ const mockSignOut = vi.fn()
 const mockNavigateTo = vi.fn()
 const mockUserRef: { value: any } = { value: null }
 
+const mockRpc = vi.fn()
+
 vi.stubGlobal('useSupabase', () => ({
   auth: {
     signInWithPassword: mockSignInWithPassword,
     signOut: mockSignOut,
   },
+  rpc: mockRpc,
 }))
 
 vi.stubGlobal('useSupabaseUser', () => mockUserRef)
@@ -153,6 +156,60 @@ describe('useAuthStore', () => {
       expect(auth.isSuperAdmin).toBe(false)
       expect(auth.can('pos:transact')).toBe(true)
       expect(auth.can('cashflow:view')).toBe(false)
+    })
+  })
+
+  describe('fetchUserPermissions (caching & deduplication)', () => {
+    it('deduplicates concurrent calls to a single RPC call', async () => {
+      mockUserRef.value = { id: 'u-1', email: 'test@pos.com' }
+      mockRpc.mockResolvedValue({
+        data: [{ permission_code: 'pos:transact' }],
+        error: null,
+      })
+
+      const auth = useAuthStore()
+
+      // Fire 3 simultaneous calls
+      await Promise.all([
+        auth.fetchUserPermissions(true),
+        auth.fetchUserPermissions(),
+        auth.fetchUserPermissions(),
+      ])
+
+      // Only 1 RPC call should have been made
+      expect(mockRpc).toHaveBeenCalledTimes(1)
+      expect(auth.permissions).toEqual(['pos:transact'])
+    })
+
+    it('reuses cached permissions within 60s without re-querying RPC', async () => {
+      mockUserRef.value = { id: 'u-1', email: 'test@pos.com' }
+      mockRpc.mockResolvedValue({
+        data: [{ permission_code: 'pos:transact' }],
+        error: null,
+      })
+
+      const auth = useAuthStore()
+      await auth.fetchUserPermissions(true)
+      expect(mockRpc).toHaveBeenCalledTimes(1)
+
+      // Second call immediately after
+      await auth.fetchUserPermissions()
+      expect(mockRpc).toHaveBeenCalledTimes(1) // Still 1!
+    })
+
+    it('re-fetches from RPC when force=true', async () => {
+      mockUserRef.value = { id: 'u-1', email: 'test@pos.com' }
+      mockRpc.mockResolvedValue({
+        data: [{ permission_code: 'pos:transact' }],
+        error: null,
+      })
+
+      const auth = useAuthStore()
+      await auth.fetchUserPermissions(true)
+      expect(mockRpc).toHaveBeenCalledTimes(1)
+
+      await auth.fetchUserPermissions(true)
+      expect(mockRpc).toHaveBeenCalledTimes(2) // Forced refresh
     })
   })
 })

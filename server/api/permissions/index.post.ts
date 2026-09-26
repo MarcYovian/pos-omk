@@ -1,5 +1,6 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import type { PermissionRecord } from '~/shared/types/users'
+import { invalidatePermissionsCatalogCache } from '../../utils/rbacCache'
 
 export default defineEventHandler(async (event) => {
   await requirePermission(event, 'roles:manage')
@@ -38,5 +39,6 @@ export default defineEventHandler(async (event) => {
     throw createError({ status: 500, statusText: error?.message || 'Gagal menambahkan permission' })
   }
 
+  invalidatePermissionsCatalogCache()
   return data as PermissionRecord
 })

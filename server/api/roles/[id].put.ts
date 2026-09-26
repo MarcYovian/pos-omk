@@ -1,5 +1,6 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import type { UpdateRoleBody } from '~/shared/types/users'
+import { invalidateRolesCache } from '../../utils/rbacCache'
 
 export default defineEventHandler(async (event) => {
   await requirePermission(event, 'roles:manage')
@@ -59,5 +60,6 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  invalidateRolesCache()
   return { success: true }
 })

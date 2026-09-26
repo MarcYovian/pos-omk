@@ -93,8 +93,10 @@ const modalGroupedPermissions = computed(() => {
 const selectedCount = computed(() => selectedPermissionCodes.value.length)
 
 // Load Data
-const fetchData = async () => {
-  isLoading.value = true
+const fetchData = async (silent: boolean = false) => {
+  if (!silent && roles.value.length === 0) {
+    isLoading.value = true
+  }
   try {
     const [rolesData, permsData] = await Promise.all([
       apiFetch<RoleRecord[]>('/api/roles'),

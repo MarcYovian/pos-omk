@@ -1,8 +1,16 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import type { RoleRecord } from '~/shared/types/users'
+import { getCachedRoles, setCachedRoles } from '../../utils/rbacCache'
 
 export default defineEventHandler(async (event) => {
   await requirePermission(event, 'roles:manage')
+
+  setHeader(event, 'Cache-Control', 'private, max-age=60, stale-while-revalidate=120')
+
+  const cached = getCachedRoles()
+  if (cached) {
+    return cached as RoleRecord[]
+  }
 
   const client = serverSupabaseServiceRole(event)
   const { data, error } = await client
@@ -45,5 +53,6 @@ export default defineEventHandler(async (event) => {
     }
   })
 
+  setCachedRoles(roles)
   return roles
 })

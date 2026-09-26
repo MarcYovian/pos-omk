@@ -134,8 +134,10 @@ const resetPermissionOverride = (item: UserPermissionOverrideItem) => {
 }
 
 // Fetch Users & Roles
-const fetchUsers = async () => {
-  isLoading.value = true
+const fetchUsers = async (silent: boolean = false) => {
+  if (!silent && users.value.length === 0) {
+    isLoading.value = true
+  }
   try {
     const [usersData, rolesData] = await Promise.all([
       apiFetch<UserRecord[]>('/api/users'),

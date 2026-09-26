@@ -43,25 +43,48 @@ export const useAuthStore = defineStore('auth', () => {
     return (r === 'admin' || r === 'cashier') ? r : 'cashier'
   }
 
-  const fetchUserPermissions = async () => {
+  // Client-side cache & request deduplication state
+  let inFlightPermsPromise: Promise<void> | null = null
+  let lastPermissionsFetch = 0
+  const PERMISSIONS_CACHE_TTL = 60_000 // 60s freshness threshold
+
+  const fetchUserPermissions = async (force: boolean = false): Promise<void> => {
     if (!user.value) {
       permissions.value = []
+      lastPermissionsFetch = 0
       return
     }
 
-    if (typeof (supabase as any)?.rpc === 'function') {
-      try {
-        const userId = user.value.id || (user.value as any).sub
-        const { data, error } = await (supabase as any).rpc('get_user_effective_permissions', {
-          p_user_id: userId
-        })
-        if (!error && data) {
-          permissions.value = (data as Array<{ permission_code: string }>).map(p => p.permission_code)
-        }
-      } catch (e) {
-        console.warn('Gagal memuat izin pengguna:', e)
-      }
+    // 1. Fresh cache hit: reuse existing permissions if within TTL
+    if (!force && permissions.value.length > 0 && (Date.now() - lastPermissionsFetch < PERMISSIONS_CACHE_TTL)) {
+      return
     }
+
+    // 2. In-flight request deduplication: reuse active promise
+    if (inFlightPermsPromise) {
+      return inFlightPermsPromise
+    }
+
+    inFlightPermsPromise = (async () => {
+      if (typeof (supabase as any)?.rpc === 'function') {
+        try {
+          const userId = user.value.id || (user.value as any).sub
+          const { data, error } = await (supabase as any).rpc('get_user_effective_permissions', {
+            p_user_id: userId
+          })
+          if (!error && data) {
+            permissions.value = (data as Array<{ permission_code: string }>).map(p => p.permission_code)
+            lastPermissionsFetch = Date.now()
+          }
+        } catch (e) {
+          console.warn('Gagal memuat izin pengguna:', e)
+        }
+      }
+    })().finally(() => {
+      inFlightPermsPromise = null
+    })
+
+    return inFlightPermsPromise
   }
 
   const login = async (email: string, password: string) => {
@@ -80,7 +103,7 @@ export const useAuthStore = defineStore('auth', () => {
         ? userRole 
         : (userRole || 'cashier')
 
-      await fetchUserPermissions()
+      await fetchUserPermissions(true)
       return data
     } finally {
       isLoading.value = false
@@ -93,6 +116,8 @@ export const useAuthStore = defineStore('auth', () => {
       await supabase.auth.signOut()
       role.value = null
       permissions.value = []
+      lastPermissionsFetch = 0
+      inFlightPermsPromise = null
       navigateTo('/login')
     } finally {
       isLoading.value = false

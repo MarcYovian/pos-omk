@@ -74,8 +74,10 @@ const formatModuleLabel = (moduleKey: string) => {
   return match ? match.label : moduleKey
 }
 
-const fetchPermissions = async () => {
-  isLoading.value = true
+const fetchPermissions = async (silent: boolean = false) => {
+  if (!silent && permissions.value.length === 0) {
+    isLoading.value = true
+  }
   try {
     const data = await apiFetch<PermissionRecord[]>('/api/permissions')
     permissions.value = data

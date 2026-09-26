@@ -1,8 +1,16 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import type { PermissionRecord } from '~/shared/types/users'
+import { getCachedPermissionsCatalog, setCachedPermissionsCatalog } from '../../utils/rbacCache'
 
 export default defineEventHandler(async (event) => {
   await requirePermission(event, 'roles:manage')
+
+  setHeader(event, 'Cache-Control', 'private, max-age=60, stale-while-revalidate=120')
+
+  const cached = getCachedPermissionsCatalog()
+  if (cached) {
+    return cached as PermissionRecord[]
+  }
 
   const client = serverSupabaseServiceRole(event)
   const { data, error } = await client
@@ -15,5 +23,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ status: 500, statusText: error.message })
   }
 
-  return data as PermissionRecord[]
+  const result = data as PermissionRecord[]
+  setCachedPermissionsCatalog(result)
+  return result
 })

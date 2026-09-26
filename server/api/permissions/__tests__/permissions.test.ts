@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { clearAllRbacCache } from '../../../utils/rbacCache'
 
 const mockCreateError = vi.fn()
 const mockReadBody = vi.fn()
 const mockGetRouterParam = vi.fn()
 const mockRequirePermission = vi.fn()
 const mockServerSupabaseServiceRole = vi.fn()
+const mockSetHeader = vi.fn()
 
 vi.mock('#supabase/server', () => ({
   serverSupabaseServiceRole: (...args: unknown[]) => mockServerSupabaseServiceRole(...args),
@@ -15,6 +17,7 @@ vi.stubGlobal('createError', mockCreateError)
 vi.stubGlobal('readBody', mockReadBody)
 vi.stubGlobal('getRouterParam', mockGetRouterParam)
 vi.stubGlobal('requirePermission', mockRequirePermission)
+vi.stubGlobal('setHeader', mockSetHeader)
 
 function mockEvent(overrides: Record<string, unknown> = {}) {
   return { context: {}, ...overrides } as any
@@ -32,6 +35,7 @@ function makeCreateError() {
 describe('Permissions API', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    clearAllRbacCache()
     mockCreateError.mockImplementation(makeCreateError())
     mockRequirePermission.mockResolvedValue({ id: 'admin-1', email: 'admin@test.com' })
   })
