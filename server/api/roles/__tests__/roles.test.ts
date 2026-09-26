@@ -172,4 +172,94 @@ describe('Roles API', () => {
       await expect(handler(mockEvent())).rejects.toThrow('Peran bawaan sistem tidak dapat dihapus')
     })
   })
+
+  describe('PUT /api/roles/[id]', () => {
+    it('updates role metadata and role_permissions mappings', async () => {
+      mockGetRouterParam.mockReturnValue('role-1')
+      mockReadBody.mockResolvedValue({
+        name: 'Updated Role',
+        description: 'Updated description',
+        permissions: ['pos:transact'],
+      })
+
+      const updateMock = vi.fn().mockReturnValue({
+        eq: vi.fn().mockResolvedValue({ error: null }),
+      })
+      const deleteRolePermsMock = vi.fn().mockReturnValue({
+        eq: vi.fn().mockResolvedValue({ error: null }),
+      })
+      const insertRolePermsMock = vi.fn().mockResolvedValue({ error: null })
+
+      const mockClient = {
+        from: vi.fn((table: string) => {
+          if (table === 'roles') {
+            return {
+              select: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  single: vi.fn().mockResolvedValue({
+                    data: { id: 'role-1', code: 'custom_role', is_system: false },
+                    error: null,
+                  }),
+                }),
+              }),
+              update: updateMock,
+            }
+          }
+          if (table === 'role_permissions') {
+            return {
+              delete: deleteRolePermsMock,
+              insert: insertRolePermsMock,
+            }
+          }
+          if (table === 'permissions') {
+            return {
+              select: vi.fn().mockReturnValue({
+                in: vi.fn().mockResolvedValue({
+                  data: [{ id: 'p1', code: 'pos:transact' }],
+                  error: null,
+                }),
+              }),
+            }
+          }
+          return {}
+        }),
+      }
+      mockServerSupabaseServiceRole.mockReturnValue(mockClient)
+
+      const handler = (await import('../[id].put')).default
+      const result = await handler(mockEvent())
+
+      expect(result).toEqual({ success: true })
+      expect(updateMock).toHaveBeenCalled()
+      expect(deleteRolePermsMock).toHaveBeenCalled()
+      expect(insertRolePermsMock).toHaveBeenCalledWith([
+        { role_id: 'role-1', permission_id: 'p1' },
+      ])
+    })
+
+    it('throws 400 when role id is missing', async () => {
+      mockGetRouterParam.mockReturnValue(undefined)
+      const handler = (await import('../[id].put')).default
+      await expect(handler(mockEvent())).rejects.toThrow('ID peran wajib disertakan')
+    })
+
+    it('throws 404 when role is not found', async () => {
+      mockGetRouterParam.mockReturnValue('non-existent')
+      mockReadBody.mockResolvedValue({ name: 'Role' })
+
+      const mockClient = {
+        from: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: null, error: { message: 'Not found' } }),
+            }),
+          }),
+        }),
+      }
+      mockServerSupabaseServiceRole.mockReturnValue(mockClient)
+
+      const handler = (await import('../[id].put')).default
+      await expect(handler(mockEvent())).rejects.toThrow('Peran tidak ditemukan')
+    })
+  })
 })
