@@ -12,15 +12,18 @@
 1. [Schema Overview](#1-schema-overview)
 2. [Entity Relationship Diagram](#2-entity-relationship-diagram)
 3. [Table Definitions](#3-table-definitions)
-   - [3.1 umkm](#31-table-umkm)
-   - [3.2 master_products](#32-table-master_products)
-   - [3.3 sessions](#33-table-sessions)
-   - [3.4 session_products](#34-table-session_products)
-   - [3.5 transactions](#35-table-transactions)
-   - [3.6 transaction_details](#36-table-transaction_details)
-   - [3.7 reconciliation](#37-table-reconciliation)
-   - [3.8 cash_flows](#38-table-cash_flows)
-   - [3.9 umkm_payments](#39-table-umkm_payments)
+   - [3.1 companies](#31-table-companies)
+   - [3.2 company_users](#32-table-company_users)
+   - [3.3 umkm](#33-table-umkm)
+   - [3.4 master_products](#34-table-master_products)
+   - [3.5 sessions](#35-table-sessions)
+   - [3.6 session_products](#36-table-session_products)
+   - [3.7 transactions](#37-table-transactions)
+   - [3.8 transaction_details](#38-table-transaction_details)
+   - [3.9 reconciliation](#39-table-reconciliation)
+   - [3.10 cash_flows](#310-table-cash_flows)
+   - [3.11 umkm_payments](#311-table-umkm_payments)
+   - [3.12 RBAC Tables](#312-rbac-tables)
 4. [Database Functions (RPC) & Triggers](#4-database-functions-rpc--triggers)
    - [4.1 complete_transaction](#41-complete_transaction)
    - [4.2 close_session](#42-close_session)
@@ -54,16 +57,25 @@
 Schema: public (default Supabase schema)
 Auth: supabase.auth.users (managed by Supabase Auth)
 
-Tables (9 total):
-  umkm                — Master directory of UMKM consignment partners
-  master_products     — Master product catalog owned by UMKM (base harga_asli)
-  sessions            — Sunday sales session lifecycle (one per date)
-  session_products    — Products active for a specific session (stok, harga_jual)
-  transactions        — Completed cashier checkout transaction headers
+Multi-Company & Core Tables:
+  companies           — Master organization/parish entities
+  company_users       — Organization membership mapping users to companies and roles
+  umkm                — Master directory of UMKM consignment partners (scoped to company_id)
+  master_products     — Master product catalog owned by UMKM (scoped to company_id)
+  sessions            — Sunday sales session lifecycle (scoped to company_id)
+  session_products    — Products active for a specific session (scoped to company_id)
+  transactions        — Completed cashier checkout transaction headers (scoped to company_id)
   transaction_details — Immutable line items per transaction (price snapshots)
-  reconciliation      — End-of-day physical stock count results
-  cash_flows          — Ledger of cash flow events (income, expense, manual, auto)
-  umkm_payments       — Consignment payout records to UMKMs (pending, paid)
+  reconciliation      — End-of-day physical stock count results (scoped to company_id)
+  cash_flows          — Ledger of cash flow events (scoped to company_id)
+  umkm_payments       — Consignment payout records to UMKMs (scoped to company_id)
+
+RBAC Tables:
+  roles               — Master definition of roles (admin, cashier, etc.)
+  permissions         — Granular system permissions catalog
+  role_permissions    — Association between roles and permissions
+  user_roles          — Global user-to-role assignment fallback
+  user_permissions    — Per-company user custom permission overrides
 
 Views (4 total):
   products_cashier_view   — Cashier-safe product view hiding harga_asli
@@ -201,17 +213,70 @@ erDiagram
 
 ## 3. Table Definitions
 
-### 3.1 Table: `umkm`
+### 3.1 Table: `companies`
 
-Master partner directory. Stores consignment partners.
+Master organization/parish entities managing consignment operations.
+
+```sql
+CREATE TABLE public.companies (
+  id          UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        VARCHAR(100)  NOT NULL,
+  slug        VARCHAR(50)   NOT NULL UNIQUE,
+  logo_url    TEXT,
+  address     TEXT,
+  phone       VARCHAR(20),
+  email       VARCHAR(100),
+  settings    JSONB         NOT NULL DEFAULT '{
+    "report_signature": "Sie Kewirausahaan OMK",
+    "currency": "IDR",
+    "timezone": "Asia/Jakarta"
+  }',
+  is_active   BOOLEAN       NOT NULL DEFAULT TRUE,
+  created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE public.companies IS 'Master organization/parish entities';
+```
+
+---
+
+### 3.2 Table: `company_users`
+
+Organization membership mapping users to companies and roles.
+
+```sql
+CREATE TABLE public.company_users (
+  id          UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id  UUID          NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  user_id     UUID          NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  role_id     UUID          NOT NULL REFERENCES public.roles(id) ON DELETE RESTRICT,
+  is_default  BOOLEAN       NOT NULL DEFAULT FALSE,
+  is_active   BOOLEAN       NOT NULL DEFAULT TRUE,
+  created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  CONSTRAINT company_users_unique_membership UNIQUE (company_id, user_id)
+);
+
+CREATE INDEX idx_company_users_user ON public.company_users(user_id);
+CREATE INDEX idx_company_users_company ON public.company_users(company_id);
+```
+
+---
+
+### 3.3 Table: `umkm`
+
+Master partner directory. Stores consignment partners scoped to each company.
 
 ```sql
 CREATE TABLE public.umkm (
   id          UUID          DEFAULT gen_random_uuid() PRIMARY KEY,
-  nama_umkm   VARCHAR(100)  NOT NULL UNIQUE,
+  company_id  UUID          NOT NULL REFERENCES public.companies(id) ON DELETE RESTRICT,
+  nama_umkm   VARCHAR(100)  NOT NULL,
   kontak_wa   VARCHAR(20)   NOT NULL,           -- Format: 08xxxxxxxxxx atau 628xxxxxxxxxx
   is_active   BOOLEAN       NOT NULL DEFAULT TRUE,
-  created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+  created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  CONSTRAINT umkm_company_nama_unique UNIQUE (company_id, nama_umkm)
 );
 
 COMMENT ON TABLE public.umkm IS 'Master table of UMKM consignment partner businesses';
@@ -222,27 +287,29 @@ COMMENT ON COLUMN public.umkm.is_active IS 'Soft delete flag. False = partner in
 | Column | Type | Nullable | Default | Notes |
 |---|---|---|---|---|
 | `id` | `uuid` | NOT NULL | `gen_random_uuid()` | PK |
-| `nama_umkm` | `varchar(100)` | NOT NULL | — | Unique partner name |
+| `company_id` | `uuid` | NOT NULL | — | FK to companies(id) |
+| `nama_umkm` | `varchar(100)` | NOT NULL | — | Partner name (unique per company) |
 | `kontak_wa` | `varchar(20)` | NOT NULL | — | WhatsApp number |
 | `is_active` | `boolean` | NOT NULL | `true` | Active status flag |
 | `created_at` | `timestamptz` | NOT NULL | `NOW()` | Timestamp |
 
 ---
 
-### 3.2 Table: `master_products`
+### 3.4 Table: `master_products`
 
-Master product catalog. Each UMKM has multiple master products with their base cost (`harga_asli`).
+Master product catalog. Each UMKM has multiple master products with their base cost (`harga_asli`), scoped to `company_id`.
 
 ```sql
 CREATE TABLE public.master_products (
   id           UUID          DEFAULT gen_random_uuid() PRIMARY KEY,
+  company_id   UUID          NOT NULL REFERENCES public.companies(id) ON DELETE RESTRICT,
   umkm_id      UUID          NOT NULL REFERENCES public.umkm(id) ON DELETE RESTRICT,
   nama_produk  VARCHAR(100)  NOT NULL,
   harga_asli   INTEGER       NOT NULL CHECK (harga_asli > 0),
   is_active    BOOLEAN       NOT NULL DEFAULT TRUE,
   created_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
   updated_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-  CONSTRAINT master_products_unique_per_umkm UNIQUE (umkm_id, nama_produk)
+  CONSTRAINT master_products_company_umkm_nama_unique UNIQUE (company_id, umkm_id, nama_produk)
 );
 
 CREATE TRIGGER trg_master_products_updated_at
@@ -1293,3 +1360,14 @@ Applied migrations to reach current schema (v3.0):
 8. **`20260707132427_add_payment_source_and_trigger`**:
    - Added `'payment'` check constraint to `cash_flows.source`.
    - Added `trg_cash_flow_from_umkm_payment` trigger to automatically record cash expense when UMKM payment is inserted.
+9. **`20260922000000_create_rbac_tables`**:
+   - Created `roles`, `permissions`, `role_permissions`, `user_roles`, and `user_permissions`.
+   - Seeded modular permissions and system roles.
+10. **`20260928000000_multi_company_phase1`**:
+   - Created `companies` and `company_users` tables.
+   - Seeded default company (`00000000-0000-0000-0000-000000000001`).
+   - Added `company_id` column to `umkm`, `master_products`, `sessions`, `session_products`, `transactions`, `cash_flows`, `umkm_payments`, `reconciliation`, and `user_permissions`.
+   - Backfilled existing data and mapped users to `company_users`.
+   - Enforced `NOT NULL` constraints and created composite unique constraints (`sessions_company_date_unique`, `umkm_company_nama_unique`, `master_products_company_umkm_nama_unique`).
+   - Added B-tree indexes for `company_id` on all tables.
+

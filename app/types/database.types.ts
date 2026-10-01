@@ -17,6 +17,7 @@ export type Database = {
       cash_flows: {
         Row: {
           amount: number
+          company_id: string
           created_at: string
           description: string | null
           id: string
@@ -27,6 +28,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          company_id: string
           created_at?: string
           description?: string | null
           id?: string
@@ -37,6 +39,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          company_id?: string
           created_at?: string
           description?: string | null
           id?: string
@@ -46,6 +49,13 @@ export type Database = {
           type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "cash_flows_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "cash_flows_session_id_fkey"
             columns: ["session_id"]
@@ -62,8 +72,99 @@ export type Database = {
           },
         ]
       }
+      companies: {
+        Row: {
+          address: string | null
+          created_at: string
+          email: string | null
+          id: string
+          is_active: boolean
+          logo_url: string | null
+          name: string
+          phone: string | null
+          settings: Json
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          logo_url?: string | null
+          name: string
+          phone?: string | null
+          settings?: Json
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          logo_url?: string | null
+          name?: string
+          phone?: string | null
+          settings?: Json
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      company_users: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          is_default: boolean
+          role_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          role_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          role_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_users_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_users_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       master_products: {
         Row: {
+          company_id: string
           created_at: string
           harga_asli: number
           id: string
@@ -73,6 +174,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          company_id: string
           created_at?: string
           harga_asli: number
           id?: string
@@ -82,6 +184,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          company_id?: string
           created_at?: string
           harga_asli?: number
           id?: string
@@ -91,6 +194,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "master_products_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "master_products_umkm_id_fkey"
             columns: ["umkm_id"]
@@ -129,6 +239,7 @@ export type Database = {
       }
       reconciliation: {
         Row: {
+          company_id: string
           created_at: string
           id: string
           recorded_by: string | null
@@ -139,6 +250,7 @@ export type Database = {
           stok_sekarang_snap: number
         }
         Insert: {
+          company_id: string
           created_at?: string
           id?: string
           recorded_by?: string | null
@@ -149,6 +261,7 @@ export type Database = {
           stok_sekarang_snap: number
         }
         Update: {
+          company_id?: string
           created_at?: string
           id?: string
           recorded_by?: string | null
@@ -159,6 +272,13 @@ export type Database = {
           stok_sekarang_snap?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "reconciliation_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reconciliation_session_id_fkey"
             columns: ["session_id"]
@@ -254,6 +374,7 @@ export type Database = {
       }
       session_products: {
         Row: {
+          company_id: string
           created_at: string
           harga_asli: number
           harga_jual: number
@@ -265,6 +386,7 @@ export type Database = {
           stok_sekarang: number
         }
         Insert: {
+          company_id: string
           created_at?: string
           harga_asli: number
           harga_jual: number
@@ -276,6 +398,7 @@ export type Database = {
           stok_sekarang: number
         }
         Update: {
+          company_id?: string
           created_at?: string
           harga_asli?: number
           harga_jual?: number
@@ -287,6 +410,13 @@ export type Database = {
           stok_sekarang?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "session_products_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "session_products_master_product_id_fkey"
             columns: ["master_product_id"]
@@ -321,6 +451,7 @@ export type Database = {
         Row: {
           closed_at: string | null
           closed_by: string | null
+          company_id: string
           created_at: string
           id: string
           opened_at: string
@@ -331,6 +462,7 @@ export type Database = {
         Insert: {
           closed_at?: string | null
           closed_by?: string | null
+          company_id: string
           created_at?: string
           id?: string
           opened_at?: string
@@ -341,6 +473,7 @@ export type Database = {
         Update: {
           closed_at?: string | null
           closed_by?: string | null
+          company_id?: string
           created_at?: string
           id?: string
           opened_at?: string
@@ -348,7 +481,15 @@ export type Database = {
           session_date?: string
           status?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "sessions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       transaction_details: {
         Row: {
@@ -411,6 +552,7 @@ export type Database = {
       transactions: {
         Row: {
           cashier_id: string | null
+          company_id: string
           created_at: string
           id: string
           kembalian: number | null
@@ -421,6 +563,7 @@ export type Database = {
         }
         Insert: {
           cashier_id?: string | null
+          company_id: string
           created_at?: string
           id?: string
           kembalian?: number | null
@@ -431,6 +574,7 @@ export type Database = {
         }
         Update: {
           cashier_id?: string | null
+          company_id?: string
           created_at?: string
           id?: string
           kembalian?: number | null
@@ -440,6 +584,13 @@ export type Database = {
           total_harga_jual?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "transactions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "transactions_session_id_fkey"
             columns: ["session_id"]
@@ -458,6 +609,7 @@ export type Database = {
       }
       umkm: {
         Row: {
+          company_id: string
           created_at: string
           id: string
           is_active: boolean
@@ -465,6 +617,7 @@ export type Database = {
           nama_umkm: string
         }
         Insert: {
+          company_id: string
           created_at?: string
           id?: string
           is_active?: boolean
@@ -472,17 +625,27 @@ export type Database = {
           nama_umkm: string
         }
         Update: {
+          company_id?: string
           created_at?: string
           id?: string
           is_active?: boolean
           kontak_wa?: string
           nama_umkm?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "umkm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       umkm_payments: {
         Row: {
           amount: number
+          company_id: string
           created_at: string
           id: string
           notes: string | null
@@ -493,6 +656,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          company_id: string
           created_at?: string
           id?: string
           notes?: string | null
@@ -503,6 +667,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          company_id?: string
           created_at?: string
           id?: string
           notes?: string | null
@@ -512,6 +677,13 @@ export type Database = {
           umkm_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "umkm_payments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "umkm_payments_umkm_id_fkey"
             columns: ["umkm_id"]
@@ -523,24 +695,34 @@ export type Database = {
       }
       user_permissions: {
         Row: {
+          company_id: string
           created_at: string
           is_granted: boolean
           permission_id: string
           user_id: string
         }
         Insert: {
+          company_id: string
           created_at?: string
           is_granted?: boolean
           permission_id: string
           user_id: string
         }
         Update: {
+          company_id?: string
           created_at?: string
           is_granted?: boolean
           permission_id?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "user_permissions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "user_permissions_permission_id_fkey"
             columns: ["permission_id"]
