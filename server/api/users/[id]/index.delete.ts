@@ -1,7 +1,8 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
+import { invalidateUsersCache, invalidateUserCache } from '../../../utils/rbacCache'
 
 export default defineEventHandler(async (event) => {
-  const admin = await requireAdmin(event)
+  const admin = await requirePermission(event, 'users:manage')
   const userId = getRouterParam(event, 'id')
 
   if (!userId) {
@@ -17,5 +18,7 @@ export default defineEventHandler(async (event) => {
 
   if (error) throw createError({ status: 500, statusText: error.message })
 
+  invalidateUsersCache()
+  invalidateUserCache(userId)
   return { success: true }
 })

@@ -1,8 +1,8 @@
-import { serverSupabaseUser } from '#supabase/server'
 import type { H3Event } from 'h3'
+import { resolveAuthUser } from './rbacCache'
 
 export async function requireAdmin(event: H3Event) {
-  const user = await serverSupabaseUser(event)
+  const user = await resolveAuthUser(event)
 
   if (!user) {
     throw createError({ status: 401, statusText: 'Unauthorized' })

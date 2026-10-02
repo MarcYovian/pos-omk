@@ -1,4 +1,5 @@
 import { serverSupabaseServiceRole, serverSupabaseUser } from '#supabase/server'
+import { invalidateUserCache, invalidateUsersCache } from '../../../utils/rbacCache'
 
 export default defineEventHandler(async (event) => {
   const currentUser = await serverSupabaseUser(event)
@@ -34,5 +35,7 @@ export default defineEventHandler(async (event) => {
 
   if (error) throw createError({ status: 500, statusText: error.message })
 
+  invalidateUsersCache()
+  invalidateUserCache(userId)
   return { success: true }
 })

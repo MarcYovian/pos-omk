@@ -1,7 +1,9 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
+import type { UpdateUserBody } from '~/shared/types/users'
+import { invalidateUsersCache, invalidateUserCache } from '../../../utils/rbacCache'
 
 export default defineEventHandler(async (event) => {
-  const admin = await requireAdmin(event)
+  await requireAdmin(event)
   const userId = getRouterParam(event, 'id')
 
   if (!userId) {
@@ -25,14 +27,40 @@ export default defineEventHandler(async (event) => {
     updatePayload.password = body.password
   }
 
-  const metadata: Record<string, string> = {}
-  let metadataChanged = false
   if (body.role) {
-    metadata.role = body.role
-    metadataChanged = true
-  }
-  if (metadataChanged) {
-    updatePayload.user_metadata = metadata
+    const roleCode = body.role.trim().toLowerCase()
+    let targetCode = roleCode
+
+    if (typeof client.from === 'function') {
+      const { data: roleData, error: roleError } = await client
+        .from('roles')
+        .select('id, code')
+        .eq('code', roleCode)
+        .single()
+
+      if (roleError || !roleData) {
+        throw createError({ status: 400, statusText: `Role '${roleCode}' is invalid` })
+      }
+
+      targetCode = roleData.code
+
+      // Upsert into user_roles
+      await client
+        .from('user_roles')
+        .upsert({ user_id: userId, role_id: roleData.id }, { onConflict: 'user_id,role_id' })
+
+      // Clean up other roles
+      await client
+        .from('user_roles')
+        .delete()
+        .eq('user_id', userId)
+        .neq('role_id', roleData.id)
+    }
+
+    // Sync auth.users metadata
+    updatePayload.user_metadata = {
+      role: targetCode,
+    }
   }
 
   if (Object.keys(updatePayload).length === 0) {
@@ -43,5 +71,7 @@ export default defineEventHandler(async (event) => {
 
   if (error) throw createError({ status: 500, statusText: error.message })
 
+  invalidateUsersCache()
+  invalidateUserCache(userId)
   return { success: true }
 })
