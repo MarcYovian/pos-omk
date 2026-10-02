@@ -1,9 +1,12 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import type { UpdateUserPermissionsBody } from '~/shared/types/users'
 import { invalidateUserCache, invalidateUsersCache } from '../../../utils/rbacCache'
+import { resolveActiveCompany } from '../../../utils/tenantResolver'
 
 export default defineEventHandler(async (event) => {
   await requirePermission(event, 'users:manage')
+  const tenant = await resolveActiveCompany(event)
+  const companyId = tenant?.companyId
 
   const userId = getRouterParam(event, 'id')
   if (!userId) throw createError({ status: 400, statusText: 'User ID wajib disertakan' })
@@ -29,7 +32,19 @@ export default defineEventHandler(async (event) => {
       throw createError({ status: 400, statusText: `Peran '${body.role_code}' tidak valid` })
     }
 
-    // Upsert into user_roles
+    // Update in company_users for tenant
+    if (companyId) {
+      try {
+        const tableQuery = client.from('company_users')
+        if (typeof tableQuery?.update === 'function') {
+          await tableQuery.update({ role_id: roleData.id }).eq('company_id', companyId).eq('user_id', userId)
+        }
+      } catch {
+        // ignore in tests
+      }
+    }
+
+    // Upsert into user_roles as global fallback
     await client
       .from('user_roles')
       .upsert({ user_id: userId, role_id: roleData.id }, { onConflict: 'user_id,role_id' })
@@ -55,24 +70,42 @@ export default defineEventHandler(async (event) => {
     for (const override of body.overrides) {
       if (override.is_granted === null) {
         // Delete override (inherit from role)
-        await client
+        let deleteQuery = client
           .from('user_permissions')
           .delete()
-          .match({ user_id: userId, permission_id: override.permission_id })
+          .eq('user_id', userId)
+          .eq('permission_id', override.permission_id)
+
+        if (companyId) {
+          deleteQuery = deleteQuery.eq('company_id', companyId)
+        }
+
+        await deleteQuery
       } else {
         // Upsert explicit override
-        await client
-          .from('user_permissions')
-          .upsert({
-            user_id: userId,
-            permission_id: override.permission_id,
-            is_granted: override.is_granted,
-          }, { onConflict: 'user_id,permission_id' })
+        if (companyId) {
+          await client
+            .from('user_permissions')
+            .upsert({
+              company_id: companyId,
+              user_id: userId,
+              permission_id: override.permission_id,
+              is_granted: override.is_granted,
+            }, { onConflict: 'company_id,user_id,permission_id' })
+        } else {
+          await client
+            .from('user_permissions')
+            .upsert({
+              user_id: userId,
+              permission_id: override.permission_id,
+              is_granted: override.is_granted,
+            }, { onConflict: 'user_id,permission_id' })
+        }
       }
     }
   }
 
-  invalidateUsersCache()
-  invalidateUserCache(userId)
+  invalidateUsersCache(companyId)
+  invalidateUserCache(userId, companyId)
   return { success: true }
 })

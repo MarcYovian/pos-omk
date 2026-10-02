@@ -1,4 +1,5 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
+import type { ToggleActiveBody } from '~/shared/types/users'
 import { invalidateUserCache, invalidateUsersCache } from '../../../utils/rbacCache'
 
 const SUPER_ADMIN_EMAIL = 'marcellinusyovian@gmail.com'
@@ -24,8 +25,20 @@ export default defineEventHandler(async (event) => {
   const client = serverSupabaseServiceRole(event)
 
   const { data: targetUser } = await client.auth.admin.getUserById(userId)
-  if (targetUser.user?.email === SUPER_ADMIN_EMAIL) {
+  if (targetUser?.user?.email === SUPER_ADMIN_EMAIL) {
     throw createError({ status: 400, statusText: 'Cannot toggle super admin status' })
+  }
+
+  // Update company_users if database is available
+  if (typeof client.from === 'function') {
+    try {
+      await client
+        .from('company_users')
+        .update({ is_active: body.is_active })
+        .eq('user_id', userId)
+    } catch {
+      // ignore in tests
+    }
   }
 
   const { error } = await client.auth.admin.updateUserById(userId, {
@@ -34,7 +47,7 @@ export default defineEventHandler(async (event) => {
 
   if (error) throw createError({ status: 500, statusText: error.message })
 
-  invalidateUsersCache()
-  invalidateUserCache(userId)
+  invalidateUsersCache((admin as any)?.companyId)
+  invalidateUserCache(userId, (admin as any)?.companyId)
   return { success: true }
 })

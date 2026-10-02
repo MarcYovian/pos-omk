@@ -1,17 +1,15 @@
 import type { H3Event } from 'h3'
-import { resolveAuthUser } from './rbacCache'
+import { resolveActiveCompany } from './tenantResolver'
 
 export async function requireAdmin(event: H3Event) {
-  const user = await resolveAuthUser(event)
+  const tenant = await resolveActiveCompany(event)
 
-  if (!user) {
-    throw createError({ status: 401, statusText: 'Unauthorized' })
+  if (!tenant.isSuperAdmin && tenant.roleCode !== 'admin') {
+    throw createError({
+      status: 403,
+      statusText: 'Forbidden: Tindakan ini memerlukan hak akses Administrator pada organisasi ini'
+    })
   }
 
-  const role = user.user_metadata?.role
-  if (role !== 'admin') {
-    throw createError({ status: 403, statusText: 'Forbidden' })
-  }
-
-  return user
+  return tenant
 }
