@@ -762,6 +762,7 @@ export type Database = {
     Views: {
       products_cashier_view: {
         Row: {
+          company_id: string | null
           created_at: string | null
           harga_jual: number | null
           id: string | null
@@ -778,6 +779,13 @@ export type Database = {
             columns: ["umkm_id"]
             isOneToOne: false
             referencedRelation: "umkm"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_products_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
           {
@@ -799,32 +807,61 @@ export type Database = {
       session_history_summary: {
         Row: {
           closed_at: string | null
+          company_id: string | null
           gross_revenue: number | null
           omk_net_profit: number | null
+          opened_at: string | null
           session_date: string | null
           session_id: string | null
           status: string | null
           total_remittance: number | null
+          total_transactions: number | null
           transaction_count: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "sessions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       top_products_sales: {
         Row: {
+          company_id: string | null
           master_product_id: string | null
           nama_produk: string | null
           sell_through_rate: number | null
           total_sold: number | null
           total_stok_awal: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "master_products_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       umkm_profit_contribution: {
         Row: {
+          company_id: string | null
           nama_umkm: string | null
           omk_profit: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "umkm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {
@@ -925,6 +962,7 @@ export type Database = {
           total_income: number
         }[]
       }
+      get_current_user_company_id: { Args: never; Returns: string }
       get_product_stock_recommendation: {
         Args: { p_master_product_id: string }
         Returns: {
@@ -997,23 +1035,42 @@ export type Database = {
           total_terjual: number
         }[]
       }
-      get_user_effective_permissions: {
-        Args: { p_user_id: string }
-        Returns: {
-          permission_code: string
-        }[]
-      }
+      get_user_effective_permissions:
+        | {
+            Args: { p_user_id: string }
+            Returns: {
+              permission_code: string
+            }[]
+          }
+        | {
+            Args: { p_company_id: string; p_user_id: string }
+            Returns: {
+              permission_code: string
+            }[]
+          }
       get_user_role: { Args: never; Returns: string }
-      get_weekly_trends: {
-        Args: { p_limit?: number }
-        Returns: {
-          gross_revenue: number
-          omk_net_profit: number
-          session_date: string
-          session_id: string
-          total_remittance: number
-        }[]
-      }
+      get_weekly_trends:
+        | {
+            Args: { p_limit?: number }
+            Returns: {
+              gross_revenue: number
+              omk_net_profit: number
+              session_date: string
+              session_id: string
+              total_remittance: number
+            }[]
+          }
+        | {
+            Args: { p_company_id: string; p_limit: number }
+            Returns: {
+              gross_revenue: number
+              omk_net_profit: number
+              session_date: string
+              session_id: string
+              total_remittance: number
+            }[]
+          }
+      is_super_admin: { Args: never; Returns: boolean }
       mark_umkm_as_paid: {
         Args: {
           p_amount: number
