@@ -118,6 +118,12 @@ export const useAuthStore = defineStore('auth', () => {
       permissions.value = []
       lastPermissionsFetch = 0
       inFlightPermsPromise = null
+      try {
+        const companyStore = useCompanyStore()
+        companyStore.reset()
+      } catch {
+        // ignore
+      }
       navigateTo('/login')
     } finally {
       isLoading.value = false

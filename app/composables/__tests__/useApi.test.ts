@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { setActivePinia, createPinia } from 'pinia'
+import { useCompanyStore } from '~/stores/company'
 import { useApi } from '~/composables/useApi'
 
 const mockGetSession = vi.fn()
@@ -84,6 +86,24 @@ describe('useApi', () => {
     expect(res).toEqual({ fallback: true })
     expect(mockFetch).toHaveBeenCalledWith('/api/error-test', {
       headers: {}
+    })
+  })
+
+  it('attaches X-Company-Id header when company store has active company', async () => {
+    setActivePinia(createPinia())
+    const companyStore = useCompanyStore()
+    companyStore.activeCompanyId = 'comp-123'
+
+    mockGetSession.mockResolvedValue({ data: { session: null } })
+    mockFetch.mockResolvedValue({ data: [] })
+
+    const { apiFetch } = useApi()
+    await apiFetch('/api/items')
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/items', {
+      headers: {
+        'X-Company-Id': 'comp-123'
+      }
     })
   })
 })

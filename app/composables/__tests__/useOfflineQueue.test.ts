@@ -42,13 +42,13 @@ describe('useOfflineQueue', () => {
     vi.clearAllMocks()
   })
 
-  it('enqueues a transaction with pending status', async () => {
+  it('enqueues a transaction with pending status and company_id', async () => {
     const { enqueue } = useOfflineQueue()
-    const tx = makeTransaction()
+    const tx = makeTransaction({ company_id: 'comp-1' })
     await enqueue(tx)
     expect(mockStore.put).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ id: 'tx-1', status: 'pending' }),
+      expect.objectContaining({ id: 'tx-1', company_id: 'comp-1', status: 'pending' }),
     )
   })
 
@@ -64,6 +64,23 @@ describe('useOfflineQueue', () => {
     expect(pending).toHaveLength(2)
     expect(pending[0].id).toBe('2')
     expect(pending[1].id).toBe('1')
+  })
+
+  it('filters pending transactions by company_id when provided', async () => {
+    mockStore.getAll.mockResolvedValue([
+      makeTransaction({ id: '1', company_id: 'comp-1', timestamp: '2025-06-15T10:00:00Z', status: 'pending' }),
+      makeTransaction({ id: '2', company_id: 'comp-2', timestamp: '2025-06-15T08:00:00Z', status: 'pending' }),
+      makeTransaction({ id: '3', company_id: 'comp-1', timestamp: '2025-06-15T09:00:00Z', status: 'pending' }),
+    ])
+
+    const { getPending } = useOfflineQueue()
+    const pendingComp1 = await getPending('comp-1')
+    expect(pendingComp1).toHaveLength(2)
+    expect(pendingComp1.map(p => p.id)).toEqual(['3', '1'])
+
+    const pendingComp2 = await getPending('comp-2')
+    expect(pendingComp2).toHaveLength(1)
+    expect(pendingComp2[0].id).toBe('2')
   })
 
   it('returns empty array when no pending transactions', async () => {

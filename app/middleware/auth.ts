@@ -21,4 +21,16 @@ export default defineNuxtRouteMiddleware((to, from) => {
   if (authStore.needsPasswordChange && to.path !== '/change-password') {
     return navigateTo('/change-password')
   }
+
+  // Inisialisasi Organisasi Pengguna jika belum dimuat
+  try {
+    const companyStore = useCompanyStore()
+    if (companyStore.availableCompanies.length === 0) {
+      companyStore.initialize().catch((err) => {
+        console.warn('Gagal inisialisasi organisasi di middleware:', err)
+      })
+    }
+  } catch {
+    // Abaikan jika Pinia belum aktif atau store belum terdaftar
+  }
 })

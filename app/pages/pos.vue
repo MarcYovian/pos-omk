@@ -19,6 +19,7 @@ definePageMeta({
 
 // Stores & Composables
 const authStore = useAuthStore()
+const companyStore = useCompanyStore()
 const sessionStore = useSessionStore()
 const productStore = useProductStore()
 const cartStore = useCartStore()
@@ -217,6 +218,15 @@ const numpadKeys = [
           <span class="pos-logo-text">OMK POS</span>
         </div>
         <span class="pos-role-badge">{{ authStore.role }}</span>
+        <!-- Indikator Paroki Aktif -->
+        <span
+          v-if="companyStore.activeCompany"
+          class="inline-flex items-center gap-1.5 text-[10px] font-bold text-brand-200 bg-brand-950/70 px-2.5 py-0.5 rounded-full border border-brand-700/60 max-w-[130px] sm:max-w-[220px] truncate shadow-sm"
+          :title="`Paroki Aktif: ${companyStore.activeCompany?.company_name}`"
+        >
+          <Icon name="heroicons:building-library" class="w-3 h-3 text-brand-300 shrink-0" />
+          <span class="truncate">{{ companyStore.activeCompany?.company_name }}</span>
+        </span>
       </div>
       <div class="pos-header-right">
         <NuxtLink

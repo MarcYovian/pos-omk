@@ -1,4 +1,6 @@
 // composables/useApi.ts
+import { useCompanyStore } from '~/stores/company'
+
 export const useApi = () => {
   const supabase = useSupabase()
 
@@ -14,6 +16,15 @@ export const useApi = () => {
       }
     } catch {
       // ignore
+    }
+
+    try {
+      const companyStore = useCompanyStore()
+      if (companyStore?.activeCompanyId) {
+        headers['X-Company-Id'] = companyStore.activeCompanyId
+      }
+    } catch {
+      // ignore when Pinia is not active or companyStore unavailable
     }
 
     return $fetch<T>(url, {

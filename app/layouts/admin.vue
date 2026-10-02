@@ -3,11 +3,14 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '~/stores/auth'
 import { useSessionStore } from '~/stores/session'
+import { useCompanyStore } from '~/stores/company'
 import ProfileDropdown from '~/components/ui/ProfileDropdown.vue'
+import CompanySwitcher from '~/components/ui/CompanySwitcher.vue'
 
 const route = useRoute()
 const authStore = useAuthStore()
 const sessionStore = useSessionStore()
+const companyStore = useCompanyStore()
 
 const isMobileMenuOpen = ref(false)
 
@@ -59,6 +62,7 @@ const navGroups: NavGroup[] = [
   {
     label: 'Pengaturan',
     items: [
+      { name: 'Profil Paroki', path: '/admin/settings/company', icon: 'heroicons:building-office-2', permission: 'company:manage' },
       { name: 'Kelola Pengguna', path: '/admin/users', icon: 'heroicons:users', permission: 'users:manage' },
       { name: 'Manajemen Role', path: '/admin/roles', icon: 'heroicons:shield-check', permission: 'roles:manage' },
       { name: 'Manajemen Permission', path: '/admin/permissions', icon: 'heroicons:key', permission: 'roles:manage' },
@@ -96,6 +100,7 @@ const currentPath = computed(() => route.path)
 
 const pageTitle = computed(() => {
   if (route.path === '/admin') return 'Ikhtisar Admin'
+  if (route.path.startsWith('/admin/settings/company')) return 'Profil Paroki'
   if (route.path.startsWith('/admin/umkm')) return 'Master Data UMKM'
   if (route.path.startsWith('/admin/setup')) return 'Setup Mingguan'
   if (route.path === '/admin/dashboard') return 'Finansial Sesi'
@@ -112,6 +117,13 @@ const pageTitle = computed(() => {
 })
 
 onMounted(async () => {
+  try {
+    if (companyStore.availableCompanies.length === 0) {
+      await companyStore.initialize()
+    }
+  } catch (e) {
+    console.warn('Gagal inisialisasi organisasi:', e)
+  }
   sessionStore.fetchTodaySession()
   if (authStore.permissions.length === 0 && !authStore.isSuperAdmin) {
     await authStore.fetchUserPermissions()
@@ -136,6 +148,11 @@ const closeMobileMenu = () => {
           <h2 class="text-sm font-black text-white tracking-tight uppercase leading-none">OMK POS Admin</h2>
           <span class="text-[9px] text-slate-400 font-mono tracking-wider">PANEL PENGELOLA</span>
         </div>
+      </div>
+
+      <!-- Organization Switcher Widget -->
+      <div class="px-3 pt-3 shrink-0">
+        <CompanySwitcher variant="sidebar" />
       </div>
 
       <!-- Session Status Widget - Fixed -->
@@ -238,6 +255,11 @@ const closeMobileMenu = () => {
           </button>
         </div>
 
+        <!-- Mobile Organization Switcher Widget -->
+        <div class="px-3 pt-3 shrink-0">
+          <CompanySwitcher variant="mobile" />
+        </div>
+
         <!-- Mobile Session Widget -->
         <div class="p-3 mx-3 my-3 bg-slate-800/40 rounded-xl border border-slate-800/50 shrink-0">
           <span class="text-[8px] text-slate-500 font-bold uppercase tracking-wider font-mono">Status Sesi</span>
@@ -309,7 +331,12 @@ const closeMobileMenu = () => {
             <Icon name="heroicons:bars-3" class="w-6 h-6" />
           </button>
           
-          <h1 class="text-md md:text-lg font-black text-slate-800 tracking-tight">{{ pageTitle }}</h1>
+          <div>
+            <h1 class="text-md md:text-lg font-black text-slate-800 tracking-tight leading-tight">{{ pageTitle }}</h1>
+            <p v-if="companyStore.activeCompany" class="text-[10px] text-slate-500 font-medium hidden sm:block">
+              Organisasi: <span class="font-bold text-slate-700">{{ companyStore.activeCompany?.company_name }}</span>
+            </p>
+          </div>
         </div>
 
         <div class="flex items-center gap-3">

@@ -63,6 +63,7 @@ describe('GET /api/public/umkm-performance/[id]', () => {
       umkm: { id: 'umkm-1', nama_umkm: 'Kue Basah Ibu Maria' },
       products: fakeProducts,
       sessions: fakeSessions,
+      sessionDetails: {},
     })
     expect(mockClient.rpc).toHaveBeenCalledWith('get_umkm_product_performance', { p_umkm_id: 'umkm-1' })
     expect(mockClient.rpc).toHaveBeenCalledWith('get_umkm_session_history', { p_umkm_id: 'umkm-1' })
