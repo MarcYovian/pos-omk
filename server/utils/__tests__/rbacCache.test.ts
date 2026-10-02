@@ -22,6 +22,13 @@ import {
   invalidatePermissionsCatalogCache,
   clearAllRbacCache,
   resolveAuthUser,
+  getCachedCompanyProfile,
+  setCachedCompanyProfile,
+  invalidateCompanyUsersCache,
+  invalidateCompanyUserCache,
+  invalidateCompanyRolesCache,
+  invalidateCompanyProfileCache,
+  invalidateAllCompanyCache,
 } from '../rbacCache'
 
 const mockServerSupabaseUser = vi.fn()
@@ -164,6 +171,40 @@ describe('rbacCache', () => {
       invalidatePermissionsCatalogCache()
       expect(getCachedPermissionsCatalog()).toBeNull()
       expect(getCachedUserPermissionsDetail('u1')).toBeNull()
+    })
+
+    it('isolates users list and invalidation per tenant company', () => {
+      const usersA = [{ id: 'u1', email: 'u1@paroki-a.com' }]
+      const usersB = [{ id: 'u2', email: 'u2@paroki-b.com' }]
+
+      setCachedUsers('comp-a', usersA)
+      setCachedUsers('comp-b', usersB)
+
+      expect(getCachedUsers('comp-a')).toEqual(usersA)
+      expect(getCachedUsers('comp-b')).toEqual(usersB)
+
+      // Invalidate comp-a only
+      invalidateCompanyUsersCache('comp-a')
+      expect(getCachedUsers('comp-a')).toBeNull()
+      expect(getCachedUsers('comp-b')).toEqual(usersB)
+    })
+
+    it('isolates user permissions and profile per tenant company', () => {
+      setCachedUserPermissions('u1', 'comp-a', ['pos:transact'])
+      setCachedUserPermissions('u1', 'comp-b', ['admin:access'])
+
+      expect(getCachedUserPermissions('u1', 'comp-a')).toEqual(['pos:transact'])
+      expect(getCachedUserPermissions('u1', 'comp-b')).toEqual(['admin:access'])
+
+      const profileA = { id: 'comp-a', name: 'Paroki St. Yohanes' }
+      setCachedCompanyProfile('comp-a', profileA)
+      expect(getCachedCompanyProfile('comp-a')).toEqual(profileA)
+
+      invalidateCompanyProfileCache('comp-a')
+      expect(getCachedCompanyProfile('comp-a')).toBeNull()
+
+      invalidateAllCompanyCache('comp-b')
+      expect(getCachedUserPermissions('u1', 'comp-b')).toBeNull()
     })
   })
 

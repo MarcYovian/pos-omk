@@ -134,8 +134,19 @@ export const useCartStore = defineStore('cart', () => {
       if (!isOnline.value) {
         // Offline Flow
         const localId = crypto.randomUUID()
+        let companyId = sessionStore.currentSession?.company_id || ''
+        try {
+          const companyStore = useCompanyStore()
+          if (companyStore?.activeCompanyId) {
+            companyId = companyStore.activeCompanyId
+          }
+        } catch {
+          // ignore
+        }
+
         await enqueue({
           id: localId,
+          company_id: companyId,
           timestamp: new Date().toISOString(),
           session_id: sessionStore.sessionId,
           cashier_id: cashierId,

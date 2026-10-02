@@ -3,7 +3,7 @@ import type { UpdateUserBody } from '~/shared/types/users'
 import { invalidateUsersCache, invalidateUserCache } from '../../../utils/rbacCache'
 
 export default defineEventHandler(async (event) => {
-  await requireAdmin(event)
+  const tenant = await requireAdmin(event)
   const userId = getRouterParam(event, 'id')
 
   if (!userId) {
@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
         .from('roles')
         .select('id, code')
         .eq('code', roleCode)
-        .single()
+        .maybeSingle()
 
       if (roleError || !roleData) {
         throw createError({ status: 400, statusText: `Role '${roleCode}' is invalid` })
@@ -44,12 +44,21 @@ export default defineEventHandler(async (event) => {
 
       targetCode = roleData.code
 
-      // Upsert into user_roles
+      // Update tenant-specific membership in company_users
+      if (tenant?.companyId) {
+        await client
+          .from('company_users')
+          .update({ role_id: roleData.id })
+          .eq('company_id', tenant.companyId)
+          .eq('user_id', userId)
+      }
+
+      // Upsert into user_roles as global fallback
       await client
         .from('user_roles')
         .upsert({ user_id: userId, role_id: roleData.id }, { onConflict: 'user_id,role_id' })
 
-      // Clean up other roles
+      // Clean up other global roles
       await client
         .from('user_roles')
         .delete()
@@ -71,7 +80,7 @@ export default defineEventHandler(async (event) => {
 
   if (error) throw createError({ status: 500, statusText: error.message })
 
-  invalidateUsersCache()
-  invalidateUserCache(userId)
+  invalidateUsersCache(tenant?.companyId)
+  invalidateUserCache(userId, tenant?.companyId)
   return { success: true }
 })

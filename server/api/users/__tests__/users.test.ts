@@ -9,6 +9,8 @@ const mockGetRequestProtocol = vi.fn()
 const mockGetRequestHost = vi.fn()
 const mockRequireAdmin = vi.fn()
 const mockRequirePermission = vi.fn()
+const mockResolveActiveCompany = vi.fn()
+const mockGetRequestHeader = vi.fn()
 const mockServerSupabaseServiceRole = vi.fn()
 const mockServerSupabaseUser = vi.fn()
 const mockGeneratePassword = vi.fn()
@@ -16,6 +18,8 @@ const mockSetHeader = vi.fn()
 
 vi.stubGlobal('generatePassword', mockGeneratePassword)
 vi.stubGlobal('setHeader', mockSetHeader)
+vi.stubGlobal('getRequestHeader', mockGetRequestHeader)
+vi.stubGlobal('resolveActiveCompany', mockResolveActiveCompany)
 
 vi.mock('#supabase/server', () => ({
   serverSupabaseServiceRole: (...args: unknown[]) => mockServerSupabaseServiceRole(...args),
@@ -33,7 +37,11 @@ vi.stubGlobal('requireAdmin', mockRequireAdmin)
 vi.stubGlobal('requirePermission', mockRequirePermission)
 
 function mockEvent(overrides: Record<string, unknown> = {}) {
-  return { context: {}, ...overrides } as any
+  return {
+    context: {},
+    node: { req: { headers: {} } },
+    ...overrides
+  } as any
 }
 
 function makeCreateError() {
@@ -47,8 +55,31 @@ function makeCreateError() {
 
 beforeEach(() => {
   clearAllRbacCache()
-  mockRequireAdmin.mockResolvedValue({ id: 'admin-1', email: 'admin@test.com', user_metadata: { role: 'admin' } })
-  mockRequirePermission.mockResolvedValue({ id: 'admin-1', email: 'admin@test.com', user_metadata: { role: 'admin' } })
+  mockRequireAdmin.mockResolvedValue({
+    id: 'admin-1',
+    email: 'admin@test.com',
+    companyId: '00000000-0000-0000-0000-000000000001',
+    roleCode: 'admin',
+    isSuperAdmin: false,
+    user_metadata: { role: 'admin' },
+  })
+  mockRequirePermission.mockResolvedValue({
+    id: 'admin-1',
+    email: 'admin@test.com',
+    companyId: '00000000-0000-0000-0000-000000000001',
+    roleCode: 'admin',
+    isSuperAdmin: false,
+    user_metadata: { role: 'admin' },
+  })
+  mockResolveActiveCompany.mockResolvedValue({
+    companyId: '00000000-0000-0000-0000-000000000001',
+    companyName: 'Default Paroki',
+    companySlug: 'default-paroki',
+    roleCode: 'admin',
+    isSuperAdmin: true,
+    id: 'admin-1',
+    email: 'marcellinusyovian@gmail.com',
+  })
   mockServerSupabaseUser.mockResolvedValue({ id: 'admin-1', email: 'admin@test.com', user_metadata: { role: 'admin' } })
 })
 
@@ -938,8 +969,8 @@ describe('PUT /api/users/[id]/permissions', () => {
 
     expect(result).toEqual({ success: true })
     expect(upsertMock).toHaveBeenCalledWith(
-      { user_id: 'user-123', permission_id: 'p2', is_granted: true },
-      { onConflict: 'user_id,permission_id' }
+      { company_id: '00000000-0000-0000-0000-000000000001', user_id: 'user-123', permission_id: 'p2', is_granted: true },
+      { onConflict: 'company_id,user_id,permission_id' }
     )
   })
 })

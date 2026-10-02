@@ -33,6 +33,21 @@ const filteredProducts = computed(() => {
 const loadData = async () => {
   isLoading.value = true
   try {
+    const res = await $fetch<any>(`/api/public/umkm-performance/${umkmId}`)
+    if (res && res.umkm) {
+      umkmName.value = res.umkm.nama_umkm
+      products.value = res.products || []
+      sessions.value = res.sessions || []
+      sessionDetails.value = res.sessionDetails || {}
+      isLoading.value = false
+      return
+    }
+  } catch (apiErr) {
+    // Fallback ke direct query jika endpoint publik tidak dapat dijangkau
+    console.warn('Fallback ke query client untuk performa UMKM:', apiErr)
+  }
+
+  try {
     const { data: umkmData, error: umkmErr } = await supabase
       .from('umkm')
       .select('nama_umkm')

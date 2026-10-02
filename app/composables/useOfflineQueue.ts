@@ -7,6 +7,7 @@ const STORE_NAME = 'pending-transactions'
 
 export interface PendingTransaction {
   id:                string          // Local UUID
+  company_id?:       string          // UUID Organisasi Asal
   timestamp:         string          // ISO string
   session_id:        string
   cashier_id:        string
@@ -18,9 +19,21 @@ export interface PendingTransaction {
 }
 
 export const useOfflineQueue = () => {
-  const getDb = () => openDB(DB_NAME, 1, {
-    upgrade(db) {
-      db.createObjectStore(STORE_NAME, { keyPath: 'id' })
+  const getDb = () => openDB(DB_NAME, 2, {
+    upgrade(db, oldVersion) {
+      if (oldVersion < 1) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'id' })
+      }
+      if (oldVersion < 2 && typeof db.transaction === 'function') {
+        try {
+          const store = db.transaction(STORE_NAME, 'versionchange').objectStore(STORE_NAME)
+          if (!store.indexNames.contains('by_company')) {
+            store.createIndex('by_company', 'company_id', { unique: false })
+          }
+        } catch {
+          // ignore index creation in mock/test environments
+        }
+      }
     }
   })
 
@@ -29,10 +42,14 @@ export const useOfflineQueue = () => {
     await db.put(STORE_NAME, { ...transaction, status: 'pending' })
   }
 
-  const getPending = async (): Promise<PendingTransaction[]> => {
+  const getPending = async (companyId?: string): Promise<PendingTransaction[]> => {
     const db = await getDb()
-    const all = await db.getAll(STORE_NAME)
-    return all.filter(t => t.status === 'pending').sort(
+    const all: PendingTransaction[] = await db.getAll(STORE_NAME)
+    let filtered = (all || []).filter(t => t.status === 'pending')
+    if (companyId) {
+      filtered = filtered.filter(t => t.company_id === companyId)
+    }
+    return filtered.sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     )
   }

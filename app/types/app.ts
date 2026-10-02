@@ -55,6 +55,7 @@ export interface UMKM {
 
 export interface Session {
   id:            string
+  company_id?:   string
   session_date:  string
   status:        'open' | 'closed'
   opened_by:     string | null
@@ -64,3 +65,51 @@ export interface Session {
   notes:         string | null
   created_at:    string
 }
+
+// Multi-Company Interfaces
+export interface CompanySettings {
+  report_signature?: string
+  currency?: string
+  timezone?: string
+  qris_name?: string | null
+  bank_info?: string | null
+  receipt_footer?: string | null
+}
+
+export interface Company {
+  id:          string
+  name:        string
+  slug:        string
+  logo_url:    string | null
+  address:     string | null
+  phone:       string | null
+  email:       string | null
+  settings:    CompanySettings | Record<string, any>
+  is_active:   boolean
+  created_at:  string
+  updated_at:  string
+}
+
+export interface CompanyUser {
+  id:          string
+  company_id:  string
+  user_id:     string
+  role_id:     string
+  is_default:  boolean
+  is_active:   boolean
+  created_at:  string
+  updated_at:  string
+}
+
+export interface UserCompanyMembership {
+  company_id:   string
+  company_name: string
+  company_slug: string
+  company_code?: string
+  logo_url?:     string | null
+  role:         string
+  role_name?:   string
+  is_default:   boolean
+  is_active:    boolean
+}
+
