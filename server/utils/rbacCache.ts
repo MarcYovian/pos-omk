@@ -75,7 +75,12 @@ export async function resolveAuthUser(event: H3Event): Promise<any> {
   // 1. Try resolving user from cookies via @nuxtjs/supabase
   try {
     user = await serverSupabaseUser(event)
-    if (user) return user
+    if (user) {
+      if (!user.id && user.sub) {
+        user.id = user.sub
+      }
+      return user
+    }
   } catch {
     // Cookie parsing failed or absent, proceed to header fallback
   }
@@ -99,8 +104,12 @@ export async function resolveAuthUser(event: H3Event): Promise<any> {
     const client = serverSupabaseServiceRole(event)
     const { data, error } = await client.auth.getUser(token)
     if (!error && data?.user) {
-      setCachedUser(token, data.user)
-      return data.user
+      const u = data.user
+      if (!u.id && (u as any).sub) {
+        u.id = (u as any).sub
+      }
+      setCachedUser(token, u)
+      return u
     }
   }
 

@@ -16,13 +16,15 @@ export async function requirePermission(event: H3Event, permission: string) {
     return user
   }
 
+  const userId = user.id || user.sub
+
   // 2. Periksa cache izin user untuk companyId ini
-  let permissions = getCachedUserPermissions(user.id, tenant.companyId)
+  let permissions = getCachedUserPermissions(userId, tenant.companyId)
 
   if (!permissions) {
     const client = serverSupabaseServiceRole(event)
     const { data, error } = await client.rpc('get_user_effective_permissions', {
-      p_user_id: user.id,
+      p_user_id: userId,
       p_company_id: tenant.companyId
     })
 
@@ -31,7 +33,7 @@ export async function requirePermission(event: H3Event, permission: string) {
     }
 
     permissions = (data as Array<{ permission_code: string }> || []).map(p => p.permission_code)
-    setCachedUserPermissions(user.id, tenant.companyId, permissions)
+    setCachedUserPermissions(userId, tenant.companyId, permissions)
   }
 
   if (!permissions.includes(permission)) {

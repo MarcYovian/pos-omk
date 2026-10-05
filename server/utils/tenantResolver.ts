@@ -4,10 +4,11 @@ import { resolveAuthUser, getCachedIsSuperAdmin, setCachedIsSuperAdmin } from '.
 import type { TenantContext } from '../../shared/types/tenant'
 
 export async function checkUserIsSuperAdmin(client: any, userId: string, userObj?: any): Promise<boolean> {
-  if (!userId) return false
+  const effectiveUserId = userId || userObj?.id || userObj?.sub
+  if (!effectiveUserId) return false
   if (typeof userObj?.isSuperAdmin === 'boolean') return userObj.isSuperAdmin
 
-  const cached = getCachedIsSuperAdmin(userId)
+  const cached = getCachedIsSuperAdmin(effectiveUserId)
   if (typeof cached === 'boolean') return cached
 
   if (typeof client?.from !== 'function') {
@@ -17,15 +18,15 @@ export async function checkUserIsSuperAdmin(client: any, userId: string, userObj
   try {
     const { data, error } = await client
       .from('user_roles')
-      .select('id, roles!inner(code)')
-      .eq('user_id', userId)
+      .select('role_id, roles!inner(code)')
+      .eq('user_id', effectiveUserId)
       .eq('roles.code', 'super_admin')
       .maybeSingle()
 
     if (error || !data) return false
     const roleCode = (data as any)?.roles?.code || (data as any)?.role_code || (data as any)?.code
     const isSuper = roleCode === 'super_admin'
-    setCachedIsSuperAdmin(userId, isSuper)
+    setCachedIsSuperAdmin(effectiveUserId, isSuper)
     return isSuper
   } catch {
     return false
@@ -44,8 +45,9 @@ export async function resolveActiveCompany(event: H3Event): Promise<TenantContex
     throw createError({ status: 401, statusText: 'Unauthorized: Sesi tidak ditemukan' })
   }
 
+  const userId = user.id || user.sub
   const client = serverSupabaseServiceRole(event)
-  const isSuperAdmin = await checkUserIsSuperAdmin(client, user.id, user)
+  const isSuperAdmin = await checkUserIsSuperAdmin(client, userId, user)
   let reqCompanyId: string | undefined
   try {
     reqCompanyId = typeof getRequestHeader === 'function'
@@ -62,7 +64,7 @@ export async function resolveActiveCompany(event: H3Event): Promise<TenantContex
       companySlug: 'default-paroki',
       roleCode: isSuperAdmin ? 'admin' : 'cashier',
       isSuperAdmin,
-      id: user.id,
+      id: userId,
       email: user.email,
       user,
     }
@@ -107,7 +109,7 @@ export async function resolveActiveCompany(event: H3Event): Promise<TenantContex
           roles (code),
           companies (id, name, slug, is_active)
         `)
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('company_id', reqCompanyId)
         .eq('is_active', true)
         .maybeSingle()
@@ -133,7 +135,7 @@ export async function resolveActiveCompany(event: H3Event): Promise<TenantContex
           roles (code),
           companies (id, name, slug, is_active)
         `)
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('is_active', true)
         .order('is_default', { ascending: false })
         .order('created_at', { ascending: true })
