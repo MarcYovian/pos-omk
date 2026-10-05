@@ -22,6 +22,10 @@ export const useAuthStore = defineStore('auth', () => {
     return role.value === 'super_admin' || permissions.value.includes('platform:manage')
   })
 
+  const isAdmin = computed(() => {
+    return isSuperAdmin.value || role.value === 'admin' || role.value === 'super_admin'
+  })
+
   const can = (permissionCode: string): boolean => {
     if (isSuperAdmin.value) return true
     if (role.value === 'admin') {
@@ -47,12 +51,12 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const getRole = (): 'admin' | 'cashier' => {
-    if (isSuperAdmin.value || role.value === 'admin' || role.value === 'super_admin') {
+    if (isAdmin.value) {
       return 'admin'
     }
     if (role.value === 'cashier') return 'cashier'
     const r = (user.value as any)?.role || user.value?.user_metadata?.role
-    return (r === 'admin' || r === 'cashier') ? r : 'cashier'
+    return (r === 'admin' || r === 'cashier' || r === 'super_admin') ? (r === 'super_admin' ? 'admin' : r) : 'cashier'
   }
 
   // Client-side cache & request deduplication state
@@ -185,6 +189,7 @@ export const useAuthStore = defineStore('auth', () => {
     role,
     permissions,
     isSuperAdmin,
+    isAdmin,
     can,
     hasRole,
     isLoading,

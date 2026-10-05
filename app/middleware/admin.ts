@@ -12,7 +12,7 @@ export default defineNuxtRouteMiddleware((to, from) => {
   }
 
   // Admin superuser bypass
-  if (authStore.role === 'admin' || authStore.isSuperAdmin) {
+  if (authStore.isAdmin || authStore.role === 'admin' || authStore.isSuperAdmin) {
     return
   }
 

@@ -11,7 +11,7 @@ const authStore = useAuthStore()
 
 onMounted(() => {
   authStore.initializeRole()
-  if (authStore.role === 'admin') {
+  if (authStore.isAdmin) {
     navigateTo('/admin')
   } else {
     navigateTo('/pos')

@@ -230,7 +230,7 @@ const numpadKeys = [
       </div>
       <div class="pos-header-right">
         <NuxtLink
-          v-if="authStore.role === 'admin'"
+          v-if="authStore.isAdmin"
           to="/admin"
           class="pos-header-btn pos-header-btn--admin"
         >
@@ -251,7 +251,7 @@ const numpadKeys = [
         </div>
         <h2 class="pos-state-title">Sesi Belum Dibuka</h2>
         <p class="pos-state-desc">Silakan hubungi admin untuk membuka sesi hari ini.</p>
-        <NuxtLink v-if="authStore.role === 'admin'" to="/admin/setup">
+        <NuxtLink v-if="authStore.isAdmin" to="/admin/setup">
           <button class="pos-state-cta">Buka Sesi Sekarang</button>
         </NuxtLink>
       </div>

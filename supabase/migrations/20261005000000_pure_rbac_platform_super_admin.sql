@@ -48,8 +48,14 @@ ON CONFLICT (user_id, role_id) DO NOTHING;
 -- 2. REVISE DATABASE FUNCTIONS (DYNAMIC RBAC - NO METADATA / NO HARDCODED EMAIL)
 -- ==============================================================================
 
+-- 2.0 Drop Ambiguous Overloaded Functions
+DROP FUNCTION IF EXISTS public.get_user_role(uuid);
+DROP FUNCTION IF EXISTS public.get_user_effective_permissions(uuid, uuid);
+DROP FUNCTION IF EXISTS public.get_weekly_trends(integer, uuid);
+DROP FUNCTION IF EXISTS public.is_super_admin(uuid);
+
 -- 2.1 Dynamic Super Admin Identifier (Queries public.user_roles)
-CREATE OR REPLACE FUNCTION public.is_super_admin(p_user_id UUID DEFAULT auth.uid())
+CREATE OR REPLACE FUNCTION public.is_super_admin()
 RETURNS BOOLEAN
 LANGUAGE sql
 STABLE
@@ -59,7 +65,22 @@ AS $$
     SELECT 1 
     FROM public.user_roles ur
     JOIN public.roles r ON r.id = ur.role_id
-    WHERE ur.user_id = COALESCE(p_user_id, auth.uid())
+    WHERE ur.user_id = auth.uid()
+      AND r.code = 'super_admin'
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_super_admin(p_user_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+AS $$
+  SELECT EXISTS (
+    SELECT 1 
+    FROM public.user_roles ur
+    JOIN public.roles r ON r.id = ur.role_id
+    WHERE ur.user_id = p_user_id
       AND r.code = 'super_admin'
   );
 $$;
@@ -143,7 +164,7 @@ END;
 $$;
 
 -- 2.3 User Role Resolver (Pure Relational - No Metadata Fallback)
-CREATE OR REPLACE FUNCTION public.get_user_role(p_company_id UUID DEFAULT NULL)
+CREATE OR REPLACE FUNCTION public.get_user_role()
 RETURNS TEXT
 LANGUAGE plpgsql
 STABLE
@@ -151,24 +172,20 @@ SECURITY DEFINER
 AS $$
 DECLARE
   v_role_code TEXT;
-  v_cid UUID := COALESCE(p_company_id, public.get_current_user_company_id());
-  v_uid UUID := auth.uid();
+  v_cid UUID;
 BEGIN
-  IF v_uid IS NULL THEN
-    RETURN 'cashier';
-  END IF;
-
-  -- 1. Super Admin is always treated as 'admin' in role checks
-  IF public.is_super_admin(v_uid) THEN
-    RETURN 'admin';
+  -- 1. Super Admin is always 'super_admin'
+  IF public.is_super_admin() THEN
+    RETURN 'super_admin';
   END IF;
 
   -- 2. Check company_users for current active company
-  IF v_cid IS NOT NULL THEN
+  v_cid := public.get_current_user_company_id();
+  IF v_cid IS NOT NULL AND auth.uid() IS NOT NULL THEN
     SELECT r.code INTO v_role_code
     FROM public.company_users cu
     JOIN public.roles r ON r.id = cu.role_id
-    WHERE cu.user_id = v_uid
+    WHERE cu.user_id = auth.uid()
       AND cu.company_id = v_cid
       AND cu.is_active = TRUE
     LIMIT 1;
@@ -182,7 +199,7 @@ BEGIN
   SELECT r.code INTO v_role_code
   FROM public.user_roles ur
   JOIN public.roles r ON r.id = ur.role_id
-  WHERE ur.user_id = v_uid
+  WHERE ur.user_id = auth.uid()
   LIMIT 1;
 
   IF v_role_code IS NOT NULL THEN
@@ -263,23 +280,21 @@ BEGIN
 END;
 $$;
 
--- 2.5 Effective Permissions Fetcher (With Company ID Parameter)
-CREATE OR REPLACE FUNCTION public.get_user_effective_permissions(
-  p_user_id UUID,
-  p_company_id UUID DEFAULT NULL
-)
+-- 2.5 Effective Permissions Fetcher
+CREATE OR REPLACE FUNCTION public.get_user_effective_permissions(p_user_id UUID)
 RETURNS TABLE (permission_code VARCHAR)
 LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 AS $$
 DECLARE
+  v_is_super BOOLEAN := FALSE;
   v_is_admin BOOLEAN := FALSE;
-  v_cid UUID := COALESCE(p_company_id, public.get_current_user_company_id());
+  v_cid UUID := public.get_current_user_company_id();
 BEGIN
-  -- 0. Cek apakah user adalah super admin
+  -- 0. Super Admin gets ALL permissions
   IF public.is_super_admin(p_user_id) THEN
-    RETURN QUERY SELECT p.code FROM public.permissions p;
+    RETURN QUERY SELECT p.code::VARCHAR FROM public.permissions p;
     RETURN;
   END IF;
 
