@@ -218,6 +218,19 @@ export function setCachedCompanyProfile(companyId: string, data: any, ttlSeconds
   cacheSet(`company:profile:${companyId}`, data, ttlSeconds)
 }
 
+// 8. Super Admin Cache
+export function getCachedIsSuperAdmin(userId: string): boolean | null {
+  return cacheGet<boolean>(`auth:is_super_admin:${userId}`)
+}
+
+export function setCachedIsSuperAdmin(userId: string, isSuper: boolean, ttlSeconds: number = RBAC_CACHE_TTL.AUTH_TOKEN): void {
+  cacheSet(`auth:is_super_admin:${userId}`, isSuper, ttlSeconds)
+}
+
+export function invalidateSuperAdminCache(userId: string): void {
+  cacheDelete(`auth:is_super_admin:${userId}`)
+}
+
 // -------------------------------------------------------------
 // Invalidation Helpers (Event-Driven & Multi-Tenant)
 // -------------------------------------------------------------
@@ -274,6 +287,7 @@ export function invalidateUsersCache(companyId?: string): void {
  */
 export function invalidateUserCache(userId: string, companyId?: string): void {
   invalidateCompanyUserCache(userId, companyId)
+  invalidateSuperAdminCache(userId)
   // Purge any tokens associated with this user
   for (const [key, entry] of cacheStore.entries()) {
     if (key.startsWith('auth:token:') && entry.value?.id === userId) {

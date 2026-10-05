@@ -21,7 +21,7 @@ const { addToast } = useToast()
 const summary = ref<any>(null)
 const isSummaryLoading = ref(false)
 const isReopening = ref(false)
-const canReopen = computed(() => !!authStore.user?.user_metadata?.can_reopen_session)
+const canReopen = computed(() => authStore.isSuperAdmin || authStore.hasRole('admin') || authStore.can('session:manage') || !!authStore.user?.user_metadata?.can_reopen_session)
 
 const isResetting = ref(false)
 const showResetConfirm = ref(false)
@@ -249,7 +249,7 @@ const handleOpenSession = async () => {
 
         <!-- Reset session button for admin -->
         <AppButton
-          v-if="sessionStore.currentSession && authStore.user?.email === 'marcellinusyovian@gmail.com'"
+          v-if="sessionStore.currentSession && (authStore.isSuperAdmin || authStore.can('session:reset'))"
           @click="showResetConfirm = true"
           variant="danger"
           size="sm"

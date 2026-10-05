@@ -1,15 +1,16 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import { resolveAuthUser } from '../../utils/rbacCache'
-import { SUPER_ADMIN_EMAIL } from '../../utils/tenantResolver'
+import { checkUserIsSuperAdmin } from '../../utils/tenantResolver'
 
 export default defineEventHandler(async (event) => {
   const user = await resolveAuthUser(event)
   if (!user) throw createError({ status: 401, statusText: 'Unauthorized' })
-  if (user.email !== SUPER_ADMIN_EMAIL) {
-    throw createError({ status: 403, statusText: 'Forbidden: Super Admin required' })
-  }
 
   const client = serverSupabaseServiceRole(event)
+  const isSuper = await checkUserIsSuperAdmin(client, user.id, user)
+  if (!isSuper) {
+    throw createError({ status: 403, statusText: 'Forbidden: Super Admin required' })
+  }
   const { data: companies, error } = await client
     .from('companies')
     .select(`

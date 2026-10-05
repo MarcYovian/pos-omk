@@ -542,7 +542,7 @@ describe('PATCH /api/users/[id]/toggle-active', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockCreateError.mockImplementation(makeCreateError())
-    mockRequireAdmin.mockResolvedValue({ id: 'admin-1', email: 'marcellinusyovian@gmail.com' })
+    mockRequireAdmin.mockResolvedValue({ id: 'admin-1', email: 'super@pos.com', isSuperAdmin: true })
     mockGetRouterParam.mockReturnValue('user-123')
     mockReadBody.mockResolvedValue({ is_active: false })
   })
@@ -568,6 +568,7 @@ describe('PATCH /api/users/[id]/toggle-active', () => {
     expect(result).toEqual({ success: true })
     expect(updateUserMock).toHaveBeenCalledWith('user-123', {
       user_metadata: { is_active: false },
+      ban_duration: '876000h',
     })
   })
 
@@ -586,7 +587,7 @@ describe('PATCH /api/users/[id]/toggle-active', () => {
   })
 
   it('throws 403 when requester is not super admin', async () => {
-    mockRequireAdmin.mockResolvedValue({ id: 'admin-2', email: 'regular@test.com' })
+    mockRequireAdmin.mockResolvedValue({ id: 'admin-2', email: 'regular@test.com', isSuperAdmin: false })
 
     const handler = (await import('../[id]/toggle-active.patch')).default
     await expect(handler(mockEvent())).rejects.toThrow('Only super admin can toggle user active status')
@@ -597,7 +598,7 @@ describe('PATCH /api/users/[id]/toggle-active', () => {
       auth: {
         admin: {
           getUserById: vi.fn().mockResolvedValue({
-            data: { user: { id: 'super', email: 'marcellinusyovian@gmail.com' } },
+            data: { user: { id: 'super', email: 'super@pos.com', isSuperAdmin: true } },
             error: null,
           }),
           updateUserById: vi.fn(),

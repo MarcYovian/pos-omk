@@ -18,10 +18,18 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoading = ref(false)
   const passwordChangeCompleted = ref(false)
 
-  const isSuperAdmin = computed(() => role.value === 'admin')
+  const isSuperAdmin = computed(() => {
+    return role.value === 'super_admin' || permissions.value.includes('platform:manage')
+  })
 
   const can = (permissionCode: string): boolean => {
     if (isSuperAdmin.value) return true
+    if (role.value === 'admin') {
+      if (permissionCode.startsWith('platform:') || permissionCode === 'users:manage_platform') {
+        return permissions.value.includes(permissionCode)
+      }
+      return true
+    }
     return permissions.value.includes(permissionCode)
   }
 
@@ -39,7 +47,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const getRole = (): 'admin' | 'cashier' => {
-    const r = user.value?.user_metadata?.role
+    if (isSuperAdmin.value || role.value === 'admin' || role.value === 'super_admin') {
+      return 'admin'
+    }
+    if (role.value === 'cashier') return 'cashier'
+    const r = (user.value as any)?.role || user.value?.user_metadata?.role
     return (r === 'admin' || r === 'cashier') ? r : 'cashier'
   }
 
@@ -47,6 +59,34 @@ export const useAuthStore = defineStore('auth', () => {
   let inFlightPermsPromise: Promise<void> | null = null
   let lastPermissionsFetch = 0
   const PERMISSIONS_CACHE_TTL = 60_000 // 60s freshness threshold
+
+  const fetchUserRole = async (targetUser?: any): Promise<void> => {
+    const u = targetUser || user.value
+    if (!u) {
+      role.value = null
+      return
+    }
+
+    const fallbackRole = (u as any)?.role || u?.user_metadata?.role
+    if (fallbackRole) {
+      role.value = (fallbackRole === 'admin' || fallbackRole === 'cashier' || fallbackRole === 'super_admin') 
+        ? fallbackRole 
+        : 'cashier'
+    } else if (!role.value) {
+      role.value = 'cashier'
+    }
+
+    if (typeof (supabase as any)?.rpc === 'function') {
+      try {
+        const res = await (supabase as any).rpc('get_user_role')
+        if (res && !res.error && res.data) {
+          role.value = res.data
+        }
+      } catch (e) {
+        console.warn('Gagal memuat peran pengguna:', e)
+      }
+    }
+  }
 
   const fetchUserPermissions = async (force: boolean = false): Promise<void> => {
     if (!user.value) {
@@ -69,11 +109,11 @@ export const useAuthStore = defineStore('auth', () => {
       if (typeof (supabase as any)?.rpc === 'function') {
         try {
           const userId = user.value.id || (user.value as any).sub
-          const { data, error } = await (supabase as any).rpc('get_user_effective_permissions', {
+          const res = await (supabase as any).rpc('get_user_effective_permissions', {
             p_user_id: userId
           })
-          if (!error && data) {
-            permissions.value = (data as Array<{ permission_code: string }>).map(p => p.permission_code)
+          if (res && !res.error && res.data) {
+            permissions.value = (res.data as Array<{ permission_code: string }>).map(p => p.permission_code)
             lastPermissionsFetch = Date.now()
           }
         } catch (e) {
@@ -92,17 +132,13 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
-      
+
       if (data.user?.user_metadata?.is_active === false) {
         await supabase.auth.signOut()
         throw new Error('Akun Anda dinonaktifkan. Silakan hubungi admin.')
       }
 
-      const userRole = data.user?.user_metadata?.role
-      role.value = (userRole === 'admin' || userRole === 'cashier' || userRole === 'treasurer' || userRole === 'stockkeeper') 
-        ? userRole 
-        : (userRole || 'cashier')
-
+      await fetchUserRole(data.user)
       await fetchUserPermissions(true)
       return data
     } finally {
@@ -132,8 +168,11 @@ export const useAuthStore = defineStore('auth', () => {
 
   const initializeRole = async () => {
     if (user.value) {
-      const r = user.value.user_metadata?.role
-      role.value = (r === 'admin' || r === 'cashier') ? r : 'cashier'
+      const fallbackRole = (user.value as any)?.role || user.value?.user_metadata?.role
+      role.value = (fallbackRole === 'admin' || fallbackRole === 'cashier' || fallbackRole === 'super_admin') 
+        ? fallbackRole 
+        : 'cashier'
+      await fetchUserRole()
       await fetchUserPermissions()
     } else {
       role.value = null

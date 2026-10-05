@@ -55,14 +55,6 @@ export default defineEventHandler(async (event) => {
       .delete()
       .eq('user_id', userId)
       .neq('role_id', roleData.id)
-
-    // Sync auth.users raw_user_meta_data for backward compatibility
-    await client.auth.admin.updateUserById(userId, {
-      user_metadata: {
-        ...userData.user.user_metadata,
-        role: roleData.code,
-      }
-    })
   }
 
   // 3. Process overrides

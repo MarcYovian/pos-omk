@@ -89,8 +89,8 @@ export default defineEventHandler(async (event) => {
     if (!currentRole) {
       currentRole = {
         id: '',
-        code: userData.user.user_metadata?.role || 'cashier',
-        name: userData.user.user_metadata?.role === 'admin' ? 'Administrator' : 'Kasir',
+        code: 'cashier',
+        name: 'Kasir',
         role_permissions: [],
       }
     }

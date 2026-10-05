@@ -140,13 +140,24 @@ describe('useAuthStore', () => {
   })
 
   describe('can and isSuperAdmin', () => {
-    it('returns true for any permission when role is admin (superuser bypass)', () => {
+    it('returns true for any permission when role is super_admin (platform super admin bypass)', () => {
       const auth = useAuthStore()
-      auth.role = 'admin'
+      auth.role = 'super_admin'
       expect(auth.isSuperAdmin).toBe(true)
       expect(auth.can('pos:transact')).toBe(true)
       expect(auth.can('roles:manage')).toBe(true)
+      expect(auth.can('platform:manage')).toBe(true)
       expect(auth.can('nonexistent:perm')).toBe(true)
+    })
+
+    it('returns true for tenant permissions when role is admin, but false for platform permissions', () => {
+      const auth = useAuthStore()
+      auth.role = 'admin'
+      expect(auth.isSuperAdmin).toBe(false)
+      expect(auth.can('pos:transact')).toBe(true)
+      expect(auth.can('roles:manage')).toBe(true)
+      expect(auth.can('platform:manage')).toBe(false)
+      expect(auth.can('users:manage_platform')).toBe(false)
     })
 
     it('returns true only for granted permissions when role is not admin', () => {

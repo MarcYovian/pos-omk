@@ -27,7 +27,7 @@ const showCloseConfirm = ref(false)
 const showMatchAllConfirm = ref(false)
 const isReopening = ref(false)
 
-const canReopen = computed(() => !!authStore.user?.user_metadata?.can_reopen_session)
+const canReopen = computed(() => authStore.isSuperAdmin || authStore.hasRole('admin') || authStore.can('session:manage') || !!authStore.user?.user_metadata?.can_reopen_session)
 
 const handleReopenSession = async () => {
   isReopening.value = true

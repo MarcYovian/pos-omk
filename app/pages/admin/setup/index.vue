@@ -76,7 +76,7 @@ const availableUmkmToSelect = computed(() => {
   return umkmStore.umkmList.filter(u => u.is_active && !currentIds.has(u.id))
 })
 
-const canReopen = computed(() => !!authStore.user?.user_metadata?.can_reopen_session)
+const canReopen = computed(() => authStore.isSuperAdmin || authStore.hasRole('admin') || authStore.can('session:manage') || !!authStore.user?.user_metadata?.can_reopen_session)
 
 const handleReopenSession = async () => {
   isReopening.value = true

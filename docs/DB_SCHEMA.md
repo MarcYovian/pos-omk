@@ -520,14 +520,20 @@ CREATE TRIGGER trg_cash_flow_from_umkm_payment
 Helper functions for multi-tenancy and granular role-based access control.
 
 ```sql
--- 4.0.1 is_super_admin: Checks if the authenticated user has super admin privileges
-CREATE OR REPLACE FUNCTION public.is_super_admin()
+-- 4.0.1 is_super_admin: Checks if the user has super_admin role in public.user_roles
+CREATE OR REPLACE FUNCTION public.is_super_admin(p_user_id UUID DEFAULT auth.uid())
 RETURNS BOOLEAN
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 AS $$
-  SELECT (auth.jwt() ->> 'email') = 'marcellinusyovian@gmail.com';
+  SELECT EXISTS (
+    SELECT 1 
+    FROM public.user_roles ur
+    JOIN public.roles r ON r.id = ur.role_id
+    WHERE ur.user_id = COALESCE(p_user_id, auth.uid())
+      AND r.code = 'super_admin'
+  );
 $$;
 
 -- 4.0.2 get_current_user_company_id: Resolves active company from X-Company-Id header or is_default fallback
@@ -999,12 +1005,9 @@ RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
-DECLARE
-  v_caller_email TEXT;
 BEGIN
-  SELECT email INTO v_caller_email FROM auth.users WHERE id = auth.uid();
-  IF public.get_user_role() != 'admin' AND v_caller_email != 'marcellinusyovian@gmail.com' THEN
-    RAISE EXCEPTION 'Access Denied: Admin role required to reset session.';
+  IF NOT public.is_super_admin() AND NOT public.authorize('session:reset') THEN
+    RAISE EXCEPTION 'Access Denied: Memerlukan hak akses Reset Sesi (Platform Super Admin).';
   END IF;
 
   DELETE FROM public.transaction_details

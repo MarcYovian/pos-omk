@@ -1,6 +1,6 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import { resolveAuthUser } from '../../utils/rbacCache'
-import { SUPER_ADMIN_EMAIL } from '../../utils/tenantResolver'
+import { checkUserIsSuperAdmin } from '../../utils/tenantResolver'
 
 interface CreateCompanyBody {
   name: string
@@ -14,7 +14,10 @@ interface CreateCompanyBody {
 export default defineEventHandler(async (event) => {
   const user = await resolveAuthUser(event)
   if (!user) throw createError({ status: 401, statusText: 'Unauthorized' })
-  if (user.email !== SUPER_ADMIN_EMAIL) {
+
+  const client = serverSupabaseServiceRole(event)
+  const isSuper = await checkUserIsSuperAdmin(client, user.id, user)
+  if (!isSuper) {
     throw createError({ status: 403, statusText: 'Forbidden: Super Admin required' })
   }
 
@@ -25,8 +28,6 @@ export default defineEventHandler(async (event) => {
 
   const name = body.name.trim()
   const slug = (body.slug?.trim() || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''))
-
-  const client = serverSupabaseServiceRole(event)
 
   // 1. Create company
   const { data: newCompany, error: compError } = await client

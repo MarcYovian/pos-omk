@@ -1,9 +1,36 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import type { H3Event } from 'h3'
-import { resolveAuthUser } from './rbacCache'
+import { resolveAuthUser, getCachedIsSuperAdmin, setCachedIsSuperAdmin } from './rbacCache'
 import type { TenantContext } from '../../shared/types/tenant'
 
-export const SUPER_ADMIN_EMAIL = 'marcellinusyovian@gmail.com'
+export async function checkUserIsSuperAdmin(client: any, userId: string, userObj?: any): Promise<boolean> {
+  if (!userId) return false
+  if (typeof userObj?.isSuperAdmin === 'boolean') return userObj.isSuperAdmin
+
+  const cached = getCachedIsSuperAdmin(userId)
+  if (typeof cached === 'boolean') return cached
+
+  if (typeof client?.from !== 'function') {
+    return false
+  }
+
+  try {
+    const { data, error } = await client
+      .from('user_roles')
+      .select('id, roles!inner(code)')
+      .eq('user_id', userId)
+      .eq('roles.code', 'super_admin')
+      .maybeSingle()
+
+    if (error || !data) return false
+    const roleCode = (data as any)?.roles?.code || (data as any)?.role_code || (data as any)?.code
+    const isSuper = roleCode === 'super_admin'
+    setCachedIsSuperAdmin(userId, isSuper)
+    return isSuper
+  } catch {
+    return false
+  }
+}
 
 export async function resolveActiveCompany(event: H3Event): Promise<TenantContext> {
   // Jika sudah ter-resolve di context request sebelumnya, gunakan kembali
@@ -17,7 +44,8 @@ export async function resolveActiveCompany(event: H3Event): Promise<TenantContex
     throw createError({ status: 401, statusText: 'Unauthorized: Sesi tidak ditemukan' })
   }
 
-  const isSuperAdmin = user.email === SUPER_ADMIN_EMAIL
+  const client = serverSupabaseServiceRole(event)
+  const isSuperAdmin = await checkUserIsSuperAdmin(client, user.id, user)
   let reqCompanyId: string | undefined
   try {
     reqCompanyId = typeof getRequestHeader === 'function'
@@ -26,14 +54,13 @@ export async function resolveActiveCompany(event: H3Event): Promise<TenantContex
   } catch {
     reqCompanyId = event?.node?.req?.headers ? event.node.req.headers['x-company-id'] : undefined
   }
-  const client = serverSupabaseServiceRole(event)
 
   if (typeof client.from !== 'function') {
     const defaultTenant: TenantContext = {
       companyId: reqCompanyId || '00000000-0000-0000-0000-000000000001',
       companyName: 'Default Paroki',
       companySlug: 'default-paroki',
-      roleCode: isSuperAdmin ? 'admin' : (user.user_metadata?.role || 'cashier'),
+      roleCode: isSuperAdmin ? 'admin' : 'cashier',
       isSuperAdmin,
       id: user.id,
       email: user.email,
@@ -146,12 +173,12 @@ export async function resolveActiveCompany(event: H3Event): Promise<TenantContex
     }
   }
 
-  // 6. Fallback untuk mock tests jika user memiliki role di user_metadata
-  if (!activeCompanyId && !reqCompanyId && (user.user_metadata?.role || isSuperAdmin)) {
+  // 6. Fallback untuk mock tests jika user memiliki role di user_metadata/objek atau isSuperAdmin
+  if (!activeCompanyId && !reqCompanyId && (isSuperAdmin || (user as any).role || user.user_metadata?.role)) {
     activeCompanyId = '00000000-0000-0000-0000-000000000001'
     companyName = 'Default Paroki'
     companySlug = 'default-paroki'
-    roleCode = isSuperAdmin ? 'admin' : (user.user_metadata?.role || 'cashier')
+    roleCode = isSuperAdmin ? 'admin' : ((user as any).role || user.user_metadata?.role || 'cashier')
   }
 
   if (!activeCompanyId) {
