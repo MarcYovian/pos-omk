@@ -2,9 +2,10 @@
 
 > **Fitur:** Multi-Company / Multi-Organisasi (Multi-Tenancy)  
 > **Fase:** 2 dari 4 (RPC Functions, Database Views, & RLS Security Policies)  
-> **Lokasi File Dokumen:** `docs/plans/proposed/multi-company/02_rpc_views_and_rls.md`  
-> **Status Dokumen:** `PROPOSED / READY FOR REVIEW`  
+> **Lokasi File Dokumen:** `docs/plans/completed/multi-company/02_rpc_views_and_rls.md`  
+> **Status Dokumen:** `COMPLETED & MERGED (LOCKED)` (PR #8)  
 > **Prasyarat:** Fase 1 (`01_database_and_data_migration.md`) telah dieksekusi  
+
 > **Target Database:** Supabase (PostgreSQL 15+)  
 
 ---

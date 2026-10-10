@@ -1,10 +1,11 @@
 # RBAC (Role-Based Access Control) & Granular Permissions Implementation Plan
 # OMK POS — Consignment & Cashier System
 
-> **Document Status:** PROPOSED (Architectural Proposal)  
-> **Target Document Location:** `docs/plans/proposed/RBAC_PERMISSIONS_PLAN.md`  
-> **Target Release:** v3.1  
+> **Document Status:** COMPLETED & MERGED (LOCKED)  
+> **Document Location:** `docs/plans/completed/RBAC_PERMISSIONS_PLAN.md`  
+> **Implemented In:** PR #7 & PR #9  
 > **Core Principles:** Zero-Downtime, Backward-Compatible, Strict Consignment Protection, Layered Authorization
+
 
 ---
 

@@ -2,9 +2,10 @@
 
 > **Fitur:** Multi-Company / Multi-Organisasi (Multi-Tenancy)  
 > **Fase:** 4 dari 4 (Frontend Nuxt 4 Client State, Header Injection, Offline Queue Isolation, & UI Organization Switcher)  
-> **Lokasi File Dokumen:** `docs/plans/proposed/multi-company/04_frontend_ui_and_switcher.md`  
-> **Status Dokumen:** `PROPOSED / READY FOR REVIEW`  
+> **Lokasi File Dokumen:** `docs/plans/completed/multi-company/04_frontend_ui_and_switcher.md`  
+> **Status Dokumen:** `COMPLETED & MERGED (LOCKED)` (PR #8)  
 > **Prasyarat:** Fase 1 (`01_database_and_data_migration.md`), Fase 2 (`02_rpc_views_and_rls.md`), dan Fase 3 (`03_backend_nitro_and_caching.md`) telah disetujui  
+
 > **Target Runtime:** Nuxt 4 (Vue 3 Composition API `<script setup lang="ts">`) + Pinia + Tailwind CSS + IndexedDB (`idb`)  
 
 ---
