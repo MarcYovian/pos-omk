@@ -85,7 +85,7 @@ pos-omk/
 | **F-01** | [`docs/qa/f01-auth-rbac/`](./f01-auth-rbac/) | `/login`, `/change-password`, `/reset-password` | ✅ **9/9 Complete** | Supabase Auth, middleware `auth.ts`, `admin.ts` |
 | **F-02** | [`docs/qa/f02-pos-cashier/`](./f02-pos-cashier/) | `/pos` | ✅ **9/9 Complete** | `useCartStore`, RPC `complete_transaction` |
 | **F-03** | `docs/qa/f03-pwa-offline/` | `/pos` (Offline Context) | ⏳ Ready | `useOfflineQueue.ts`, `OfflineBanner.vue`, `idb` |
-| **F-04** | `docs/qa/f04-umkm-master/` | `/admin/umkm`, `/admin/umkm/[umkm_id]` | ⏳ Ready | `useUmkmStore`, tabel `umkm`, `master_products` |
+| **F-04** | [`docs/qa/f04-umkm-master/`](./f04-umkm-master/) | `/admin/umkm`, `/admin/umkm/[umkm_id]` | ✅ **9/9 Complete** | `useUmkmStore`, tabel `umkm`, `master_products` |
 | **F-05** | `docs/qa/f05-session-setup/` | `/admin/setup`, `/admin/setup/[umkm_id]` | ⏳ Ready | `useSessionStore`, RPC `get_product_stock_recommendation` |
 | **F-06** | `docs/qa/f06-financial-dashboard/` | `/admin/dashboard` | ⏳ Ready | RPC `get_session_financial_summary`, `reopen_session` |
 | **F-07** | `docs/qa/f07-stock-reconciliation/`| `/admin/reconciliation` | ⏳ Ready | RPC `close_session`, tabel `reconciliation` |
