@@ -1,8 +1,0 @@
-{
-  "name": "qa-spec-and-scenario-skill",
-  "version": "1.0.0",
-  "description": "QA brief, questions/assumptions, and test scenarios generator based on PRD User Stories and BDD Given-When-Then.",
-  "author": {
-    "name": "Senior QA Automation Team"
-  }
-}

@@ -1,7 +1,0 @@
-{
-  "name": "qa-spec-and-scenario-skill",
-  "version": "1.0.0",
-  "description": "Generator for QA feature brief, questions, assumptions, and Given-When-Then scenarios.",
-  "category": "testing",
-  "tags": ["qa", "testing", "bdd", "scenarios", "prd"]
-}

@@ -1,7 +1,0 @@
-{
-  "name": "qa-doc-suite",
-  "version": "1.0.0",
-  "description": "Master orchestrator for QA documentation pipeline with review gatekeeper and automated audit.",
-  "category": "testing",
-  "tags": ["qa", "orchestrator", "testing", "documentation", "audit"]
-}

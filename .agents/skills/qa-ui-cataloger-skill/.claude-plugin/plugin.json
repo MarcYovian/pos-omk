@@ -1,8 +1,0 @@
-{
-  "name": "qa-ui-cataloger-skill",
-  "version": "1.0.0",
-  "description": "Generator for QA Screen Flow, Test Data Specs, and Element Locator Inventory with Developer Patch Recommendations.",
-  "author": {
-    "name": "Senior QA Automation Team"
-  }
-}

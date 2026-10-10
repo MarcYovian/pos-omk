@@ -1,7 +1,0 @@
-{
-  "name": "qa-test-case-and-runner-skill",
-  "version": "1.0.0",
-  "description": "QA test case detail, Playwright POM architecture, and live browser runner.",
-  "category": "testing",
-  "tags": ["qa", "testing", "playwright", "test-cases", "pom", "reports"]
-}

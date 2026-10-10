@@ -36,3 +36,8 @@ Thumbs.db
 
 # opencode AI config
 opencode.json
+
+# AI Agent Instructions & Workspace Skills
+.agents/
+AGENTS.md
+GEMINI.md
