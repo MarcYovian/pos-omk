@@ -178,3 +178,25 @@ For detailed specifications, inspect the dedicated documents in `docs/`:
 | [**`docs/USER_FLOWS.md`**](./docs/USER_FLOWS.md) | Complete user journey and state flows for cashier & admin. |
 | [**`docs/plans/completed/PRD_v1_MVP.md`**](./docs/plans/completed/PRD_v1_MVP.md) | Historical MVP v1.0 PRD and business domain foundation. |
 | [**`docs/plans/proposed/`**](./docs/plans/proposed/) | Future feature proposals and architectural drafts. |
+
+
+---
+
+## 12. Obsidian Protocol (Second Brain)
+
+- **Vault Location:** `/home/rodex/Documents/cell/obsidian/Workspace` · CLI: `obsidian-wiki` (vault globally configured).
+- **Vault Topology:**
+  - `journal/YYYY-MM-DD/` — Session logs (`0X_<Topic>.md`) and daily rollups (`00_Daily_Summary.md`).
+  - `references/{gateway,backend,notes,QA_Cheatsheets}/` — SSOT docs (`doc-ota`), local guides, and QA cheatsheets.
+  - `projects/` & `_meta/` — Project tracking, memory tables, profiles, and pending todos.
+  - `concepts/` & `entities/` — Atomic technical concepts, data models, and vendor entities.
+- **Session Lifecycle:**
+  - *Start:* (When user says "recap", "continue", or starts a fresh session): run `obsidian-wiki memory recap` and `obsidian-wiki memory todo list`. Check drift: `obsidian-wiki projects-check --pretty /home/rodex/Documents/cell/obsidian/Workspace`.
+  - *During Work:* Query via `obsidian-wiki query "<topic>"` or `obsidian-wiki context-pack "<topic>" --budget 2000`. Use Obsidian MCP tools (`obsidian_get_file_contents`, `obsidian_search_by_tag`) for direct note reads.
+  - *Carry-over / Handoff:* Add pending thread via `obsidian-wiki memory todo add "<task>" --origin "<page>"`; mark resolved via `obsidian-wiki memory todo done <id>`.
+- **Knowledge Ingestion & Logging Criteria:**
+  - *Auto/Instructed:* Run skill `obsidian-session-logger-skill` when user explicitly commands ("log this session", "catat ke obsidian").
+  - *Proactive Offer ("Record to Obsidian?"):* Only for critical bug Root Cause Analysis (RCA), discovered vendor quirks (undocumented API behaviors), and architectural decisions (ADRs).
+  - *Noise Filter:* NEVER record trivial typos, temporary shell snippets, or standard test runs.
+  - *Atomic Notes:* Use skill `obsidian-pkm-manager-skill` for new technical guides or cheatsheets.
+- **Post-Write Rule:** Always run `obsidian-wiki memory sync` after creating or editing vault notes to update `index.md` and `hot.md`.
