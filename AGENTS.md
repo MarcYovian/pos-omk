@@ -183,6 +183,7 @@ For detailed specifications, inspect the dedicated documents in `docs/`:
 | [**`docs/ARCHITECTURE.md`**](./docs/ARCHITECTURE.md) | Full architectural layout, layer boundaries, and runtime system design. |
 | [**`docs/DB_SCHEMA.md`**](./docs/DB_SCHEMA.md) | Database schema, RPC functions, triggers, views, and multi-tenant RLS policies. |
 | [**`docs/USER_FLOWS.md`**](./docs/USER_FLOWS.md) | Complete user journey and state flows for cashier & admin. |
+| [**`docs/qa/README.md`**](./docs/qa/README.md) | QA Hub: 9-stage progressive review SOP, locator catalog standards, and 16-feature QA roadmap. |
 | [**`docs/plans/completed/`**](./docs/plans/completed/) | Historical archive of past implementation plans (PRD MVP v1, Multi-Company, Dynamic RBAC). |
 | [**`docs/plans/proposed/`**](./docs/plans/proposed/) | Future feature proposals and architectural drafts. |
 
@@ -212,3 +213,27 @@ For detailed specifications, inspect the dedicated documents in `docs/`:
   - *Noise & Secret Filter:* NEVER record trivial typos, temporary shell runs, secret keys (`SUPABASE_SECRET_KEY`), or unmasked vendor personal data.
   - *Atomic Notes:* Use skill `obsidian-pkm-manager-skill` for new technical guides; always include YAML frontmatter and bi-directional wikilinks (`[[projects/POS OMK|POS OMK]]`).
 - **Post-Write Rule:** Always run `obsidian-wiki memory sync` after creating or editing vault notes to update `index.md` and `hot.md`. (Run `obsidian-wiki sync` if pushing vault git commits is required).
+
+---
+
+## 13. AI Agent Skills Registry & QA Automation Tooling
+
+Repository ini didukung oleh rangkaian skill standar [Open Agent Skills (SKILL.md)](https://agents.md/) yang diinstal secara global (`~/.gemini/config/skills/` dan linked ke `~/.agents/skills/`) untuk memandu agen AI dan pengembang:
+
+### 13.1. QA Documentation & UI Automation Suite (`qa-doc-suite`)
+Pipeline pengujian antarmuka bertahap (9 tahap) dengan integrasi **Playwright MCP** dan triangulasi dokumentasi master ([`docs/PRD.md`](./docs/PRD.md), [`docs/USER_FLOWS.md`](./docs/USER_FLOWS.md)) + source code Vue/Pinia:
+
+| Nama Skill | Trigger Command | Deskripsi & Peran |
+|---|---|---|
+| **`qa-doc-suite`** | `/qa-doc-suite [fitur]`<br>`/qa-suite [fitur]` | **Master Orchestrator & Gatekeeper:** Mengorkestrasi pipeline 9 dokumen lengkap per fitur, menegakkan gerbang review (*Review Gates 1-3, 4-6, 7-9*), dan menjalankan audit kepatuhan format (`python3 scripts/audit_docs.py`). |
+| **`qa-code-and-ui-analyzer-skill`** | `/qa-analyze [fitur]` | **Discovery Engine:** Membedah PRD, User Flows, file Vue SFC, store Pinia, RPC, serta live DOM & tree aksesibilitas via Playwright MCP (`browser_snapshot`, `browser_evaluate`). Menghasilkan `feature-analysis.json`. |
+| **`qa-spec-and-scenario-skill`** | `/qa-spec-plan [fitur]` | **Scenario Planner:** Menghasilkan Dokumen Tahap 1, 2, 3 (`00-feature-brief.md`, `01-questions-assumptions.md`, `02-test-scenarios.md`) berformat BDD *Given-When-Then* langsung dari Acceptance Criteria PRD. |
+| **`qa-ui-cataloger-skill`** | `/qa-ui-catalog [fitur]` | **UI & Locator Cataloger:** Menghasilkan Dokumen Tahap 4, 5, 6 (`03-screen-flow.md`, `04-test-data-spec.md`, `05-element-catalog.md`). Menerapkan *Dual-Strategy Locator* (Semantic Fallback + Rekomendasi Patch `data-testid` untuk developer). |
+| **`qa-test-case-and-runner-skill`** | `/qa-test-run [fitur]` | **Test Architect & Runner:** Menghasilkan Dokumen Tahap 7, 8, 9 (`06-test-cases.md`, `07-automation-architecture.md`, `reports/YYYY-MM-DD-run-01.md`). Mendukung eksekusi live test interaktif via Playwright MCP. |
+
+### 13.2. Knowledge Management & Project Governance Skills
+| Nama Skill | Trigger Command | Deskripsi & Peran |
+|---|---|---|
+| **`obsidian-session-logger-skill`** | `/log-session`<br>`catat sesi ini` | Mencatat riwayat sesi pair-programming ke Obsidian daily note (`0X_POS_OMK_<Topic>.md`) dengan tagging `#project/pos-omk`. |
+| **`obsidian-pkm-manager-skill`** | `/obsidian-note`<br>`/pkm-manager` | Mengelola catatan teknis atomik, ADR (Architecture Decision Records), dan panduan dev dengan validasi YAML dan backlink. |
+| **`agent-skill-creator`** | `/agent-skill-creator` | Mesin pembuat skill cross-platform Level 5 untuk menambah kapabilitas agent baru secara terstandarisasi. |
