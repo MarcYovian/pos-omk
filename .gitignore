@@ -41,3 +41,7 @@ opencode.json
 .agents/
 AGENTS.md
 GEMINI.md
+
+# Playwright Test Outputs
+test-results/
+playwright-report/
