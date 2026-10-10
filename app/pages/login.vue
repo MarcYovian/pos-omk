@@ -16,11 +16,11 @@ const authStore = useAuthStore()
 const { addToast } = useToast()
 const user = useSupabaseUser()
 
-onMounted(() => {
+onMounted(async () => {
   // If user is already authenticated, redirect to role home
   if (user.value) {
-    authStore.initializeRole()
-    if (authStore.role === 'admin') {
+    await authStore.initializeRole()
+    if (authStore.isAdmin) {
       navigateTo('/admin')
     } else {
       navigateTo('/pos')
@@ -47,7 +47,7 @@ const handleLogin = async () => {
       message: 'Login berhasil!'
     })
 
-    if (authStore.role === 'admin') {
+    if (authStore.isAdmin) {
       await navigateTo('/admin')
     } else {
       await navigateTo('/pos')

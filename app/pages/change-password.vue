@@ -62,7 +62,7 @@ const handleSubmit = async () => {
     authStore.markPasswordChangeCompleted()
     addToast({ type: 'success', message: 'Kata sandi berhasil diperbarui!' })
 
-    const target = authStore.role === 'admin' ? '/admin' : '/pos'
+    const target = authStore.isAdmin ? '/admin' : '/pos'
     navigateTo(target)
   } catch (e: any) {
     addToast({ type: 'danger', message: e.message || 'Gagal memperbarui kata sandi' })

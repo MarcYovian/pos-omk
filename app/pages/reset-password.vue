@@ -64,9 +64,10 @@ const handleResetSubmit = async () => {
     authStore.markPasswordChangeCompleted()
     addToast({ type: 'success', message: 'Kata sandi berhasil diperbarui!' })
 
-    const role = data.user?.user_metadata?.role
+    await authStore.initializeRole()
+    const targetRole = authStore.getRole()
     isSubmitting.value = false
-    navigateTo(role === 'admin' ? '/admin' : '/pos')
+    navigateTo(targetRole === 'admin' ? '/admin' : '/pos')
   } catch (e: any) {
     addToast({ type: 'danger', message: e.message || 'Gagal memperbarui kata sandi' })
     isSubmitting.value = false

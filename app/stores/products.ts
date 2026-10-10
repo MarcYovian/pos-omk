@@ -34,7 +34,7 @@ export const useProductStore = defineStore('products', () => {
     error.value = null
 
     try {
-      if (authStore.role === 'admin') {
+      if (authStore.isAdmin) {
         const { data, error: fetchError } = await supabase
           .from('session_products')
           .select(`

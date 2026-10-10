@@ -1,14 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { resolveActiveCompany, SUPER_ADMIN_EMAIL } from '../tenantResolver'
+import { resolveActiveCompany } from '../tenantResolver'
 
 const mockResolveAuthUser = vi.fn()
 const mockServerSupabaseServiceRole = vi.fn()
 const mockGetRequestHeader = vi.fn()
 const mockCreateError = vi.fn()
 
-vi.mock('../rbacCache', () => ({
-  resolveAuthUser: (...args: unknown[]) => mockResolveAuthUser(...args),
-}))
+vi.mock('../rbacCache', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../rbacCache')>()
+  return {
+    ...actual,
+    resolveAuthUser: (...args: unknown[]) => mockResolveAuthUser(...args),
+  }
+})
 
 vi.mock('#supabase/server', () => ({
   serverSupabaseServiceRole: (...args: unknown[]) => mockServerSupabaseServiceRole(...args),
@@ -93,7 +97,7 @@ describe('tenantResolver', () => {
   })
 
   it('resolves any company for Super Admin via X-Company-Id header', async () => {
-    const superAdminUser = { id: 'super-1', email: SUPER_ADMIN_EMAIL }
+    const superAdminUser = { id: 'super-1', email: 'super@test.com', isSuperAdmin: true }
     mockResolveAuthUser.mockResolvedValue(superAdminUser)
     mockGetRequestHeader.mockReturnValue('any-comp-id')
 

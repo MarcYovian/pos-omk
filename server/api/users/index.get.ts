@@ -98,15 +98,15 @@ export default defineEventHandler(async (event) => {
 
   const users = targetAuthUsers.map((u) => {
     const assignedRole = userRolesMap.get(u.id)
-    const rawRole = u.user_metadata?.role
+    const rawRole = (u as any).role || u.user_metadata?.role
     let roleCode = assignedRole?.code || rawRole || 'cashier'
 
-    // If not a known valid role or not in DB, fallback to cashier
-    if (!assignedRole && roleCode !== 'admin' && roleCode !== 'cashier') {
+    // If not a known valid role, fallback to cashier
+    if (!assignedRole && roleCode !== 'admin' && roleCode !== 'cashier' && roleCode !== 'super_admin') {
       roleCode = 'cashier'
     }
 
-    const roleName = assignedRole?.name || (roleCode === 'admin' ? 'Administrator' : 'Kasir')
+    const roleName = assignedRole?.name || (roleCode === 'super_admin' ? 'Super Admin' : roleCode === 'admin' ? 'Administrator' : 'Kasir')
     const isActive = memberActiveMap.has(u.id)
       ? memberActiveMap.get(u.id)!
       : (u.user_metadata?.is_active !== false)

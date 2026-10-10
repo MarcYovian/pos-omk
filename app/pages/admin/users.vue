@@ -28,6 +28,14 @@ const { apiFetch } = useApi()
 // State
 const users = ref<UserRecord[]>([])
 const availableRoles = ref<RoleRecord[]>([])
+const creatableRoles = computed(() => {
+  return availableRoles.value.filter(r => {
+    if (r.code === 'super_admin') {
+      return authStore.isSuperAdmin
+    }
+    return true
+  })
+})
 const isLoading = ref(false)
 const searchQuery = ref('')
 
@@ -303,7 +311,7 @@ const handleSendResetEmail = async (id: string) => {
 const isTogglingActive = ref<Record<string, boolean>>({})
 
 const handleToggleActive = async (user: UserRecord) => {
-  if (user.email === 'marcellinusyovian@gmail.com') return
+  if (user.role === 'super_admin' || user.id === authStore.user?.id) return
   isTogglingActive.value[user.id] = true
   try {
     await apiFetch(`/api/users/${user.id}/toggle-active`, {
@@ -490,9 +498,9 @@ const handleSavePermissions = async () => {
               <span>PERMISSIONS</span>
             </button>
 
-            <!-- Toggle active/inactive status (for marcellinusyovian@gmail.com only) -->
+            <!-- Toggle active/inactive status (for users:manage_platform or super admin) -->
             <button
-              v-if="authStore.user?.email === 'marcellinusyovian@gmail.com' && u.email !== 'marcellinusyovian@gmail.com'"
+              v-if="(authStore.isSuperAdmin || authStore.can('users:manage_platform')) && u.role !== 'super_admin' && u.id !== authStore.user?.id"
               type="button"
               @click="handleToggleActive(u)"
               :disabled="isTogglingActive[u.id]"
@@ -566,7 +574,7 @@ const handleSavePermissions = async () => {
             v-model="createRole"
             class="w-full text-xs font-semibold px-3 py-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 bg-white min-h-touch"
           >
-            <option v-for="r in availableRoles" :key="r.id" :value="r.code">
+            <option v-for="r in creatableRoles" :key="r.id" :value="r.code">
               {{ r.name }} ({{ r.code }})
             </option>
           </select>
@@ -637,7 +645,7 @@ const handleSavePermissions = async () => {
             v-model="editRole"
             class="w-full text-xs font-semibold px-3 py-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 bg-white min-h-touch"
           >
-            <option v-for="r in availableRoles" :key="r.id" :value="r.code">
+            <option v-for="r in creatableRoles" :key="r.id" :value="r.code">
               {{ r.name }} ({{ r.code }})
             </option>
           </select>

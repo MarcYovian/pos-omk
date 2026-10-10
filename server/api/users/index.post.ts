@@ -22,6 +22,10 @@ export default defineEventHandler(async (event) => {
   let roleId: string | null = null
 
   if (typeof client.from === 'function') {
+    if (requestedRoleCode === 'super_admin' && !tenant.isSuperAdmin) {
+      throw createError({ status: 403, statusText: 'Forbidden: Hanya Super Admin yang dapat menugaskan role Super Admin' })
+    }
+
     const { data: roleData, error: roleFetchError } = await client
       .from('roles')
       .select('id, code, name')
@@ -36,7 +40,7 @@ export default defineEventHandler(async (event) => {
     roleId = roleData.id
   } else {
     // Minimal mock fallback
-    if (requestedRoleCode !== 'admin' && requestedRoleCode !== 'cashier') {
+    if (requestedRoleCode !== 'admin' && requestedRoleCode !== 'cashier' && requestedRoleCode !== 'super_admin') {
       throw createError({ status: 400, statusText: 'Role must be admin or cashier' })
     }
   }
@@ -78,37 +82,45 @@ export default defineEventHandler(async (event) => {
     createdUserAuth = data.user
   }
 
-  // 3. Link user to company_users
+  // 3. Link user to company_users or user_roles
   if (typeof client.from === 'function') {
     try {
-      if (tenant?.companyId && roleId) {
-        // Check if user is already an active member of this company
-        const { data: existingMember } = await client
-          .from('company_users')
-          .select('id')
-          .eq('company_id', tenant.companyId)
-          .eq('user_id', userId)
-          .maybeSingle()
+      if (targetRoleCode === 'super_admin') {
+        if (roleId) {
+          await client
+            .from('user_roles')
+            .upsert({ user_id: userId, role_id: roleId }, { onConflict: 'user_id' })
+        }
+      } else {
+        if (tenant?.companyId && roleId) {
+          // Check if user is already an active member of this company
+          const { data: existingMember } = await client
+            .from('company_users')
+            .select('id')
+            .eq('company_id', tenant.companyId)
+            .eq('user_id', userId)
+            .maybeSingle()
 
-        if (existingMember) {
-          throw createError({ status: 400, statusText: 'Pengguna sudah terdaftar di organisasi ini' })
+          if (existingMember) {
+            throw createError({ status: 400, statusText: 'Pengguna sudah terdaftar di organisasi ini' })
+          }
+
+          await client
+            .from('company_users')
+            .insert({
+              company_id: tenant.companyId,
+              user_id: userId,
+              role_id: roleId,
+              is_active: true,
+            })
         }
 
-        await client
-          .from('company_users')
-          .insert({
-            company_id: tenant.companyId,
-            user_id: userId,
-            role_id: roleId,
-            is_active: true,
-          })
-      }
-
-      // Also maintain global user_roles fallback
-      if (roleId) {
-        await client
-          .from('user_roles')
-          .upsert({ user_id: userId, role_id: roleId }, { onConflict: 'user_id' })
+        // Also maintain global user_roles fallback
+        if (roleId) {
+          await client
+            .from('user_roles')
+            .upsert({ user_id: userId, role_id: roleId }, { onConflict: 'user_id' })
+        }
       }
     } catch (err: any) {
       if (err.statusCode) throw err

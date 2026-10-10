@@ -1,6 +1,6 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import { resolveAuthUser } from '../../utils/rbacCache'
-import { SUPER_ADMIN_EMAIL } from '../../utils/tenantResolver'
+import { checkUserIsSuperAdmin } from '../../utils/tenantResolver'
 
 export default defineEventHandler(async (event) => {
   const user = await resolveAuthUser(event)
@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const client = serverSupabaseServiceRole(event)
-  const isSuperAdmin = user.email === SUPER_ADMIN_EMAIL
+  const isSuperAdmin = await checkUserIsSuperAdmin(client, user.id, user)
 
   if (isSuperAdmin) {
     const { data: companies, error } = await client

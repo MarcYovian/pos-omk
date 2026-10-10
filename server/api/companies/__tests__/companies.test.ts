@@ -8,6 +8,7 @@ const mockSetResponseStatus = vi.fn()
 const mockResolveAuthUser = vi.fn()
 const mockResolveActiveCompany = vi.fn()
 const mockRequireAdmin = vi.fn()
+const mockCheckUserIsSuperAdmin = vi.fn()
 const mockServerSupabaseServiceRole = vi.fn()
 
 vi.mock('../../../utils/rbacCache', async () => {
@@ -18,10 +19,14 @@ vi.mock('../../../utils/rbacCache', async () => {
   }
 })
 
-vi.mock('../../../utils/tenantResolver', () => ({
-  SUPER_ADMIN_EMAIL: 'marcellinusyovian@gmail.com',
-  resolveActiveCompany: (...args: unknown[]) => mockResolveActiveCompany(...args),
-}))
+vi.mock('../../../utils/tenantResolver', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../utils/tenantResolver')>()
+  return {
+    ...actual,
+    resolveActiveCompany: (...args: unknown[]) => mockResolveActiveCompany(...args),
+    checkUserIsSuperAdmin: (...args: unknown[]) => mockCheckUserIsSuperAdmin(...args),
+  }
+})
 
 vi.mock('../../../utils/requireAdmin', () => ({
   requireAdmin: (...args: unknown[]) => mockRequireAdmin(...args),
@@ -59,7 +64,8 @@ describe('Company Endpoints', () => {
 
   describe('GET /api/companies/my-companies', () => {
     it('returns all active companies for Super Admin', async () => {
-      mockResolveAuthUser.mockResolvedValue({ id: 'super-1', email: 'marcellinusyovian@gmail.com' })
+      mockResolveAuthUser.mockResolvedValue({ id: 'super-1', email: 'super@pos.com', isSuperAdmin: true })
+      mockCheckUserIsSuperAdmin.mockResolvedValue(true)
       const fakeCompanies = [
         { id: 'c1', name: 'Paroki A', slug: 'paroki-a', is_active: true, settings: {} },
         { id: 'c2', name: 'Paroki B', slug: 'paroki-b', is_active: true, settings: {} },
@@ -81,7 +87,8 @@ describe('Company Endpoints', () => {
     })
 
     it('returns user memberships for regular user', async () => {
-      mockResolveAuthUser.mockResolvedValue({ id: 'user-1', email: 'user@test.com' })
+      mockResolveAuthUser.mockResolvedValue({ id: 'user-1', email: 'user@test.com', isSuperAdmin: false })
+      mockCheckUserIsSuperAdmin.mockResolvedValue(false)
       const fakeMemberships = [
         {
           company_id: 'c1',
@@ -203,7 +210,8 @@ describe('Company Endpoints', () => {
 
   describe('POST /api/companies', () => {
     it('allows Super Admin to create a new company', async () => {
-      mockResolveAuthUser.mockResolvedValue({ id: 'super-1', email: 'marcellinusyovian@gmail.com' })
+      mockResolveAuthUser.mockResolvedValue({ id: 'super-1', email: 'super@pos.com', isSuperAdmin: true })
+      mockCheckUserIsSuperAdmin.mockResolvedValue(true)
       mockReadBody.mockResolvedValue({ name: 'Paroki Baru' })
 
       const createdCompany = { id: 'new-c', name: 'Paroki Baru', slug: 'paroki-baru' }
@@ -226,7 +234,8 @@ describe('Company Endpoints', () => {
     })
 
     it('throws 403 when non-super-admin tries to create company', async () => {
-      mockResolveAuthUser.mockResolvedValue({ id: 'user-1', email: 'regular@test.com' })
+      mockResolveAuthUser.mockResolvedValue({ id: 'user-1', email: 'regular@test.com', isSuperAdmin: false })
+      mockCheckUserIsSuperAdmin.mockResolvedValue(false)
       mockReadBody.mockResolvedValue({ name: 'Paroki Baru' })
 
       const handler = (await import('../index.post')).default
@@ -236,7 +245,8 @@ describe('Company Endpoints', () => {
 
   describe('PATCH /api/companies/[id]/toggle-active', () => {
     it('allows Super Admin to toggle company active status', async () => {
-      mockResolveAuthUser.mockResolvedValue({ id: 'super-1', email: 'marcellinusyovian@gmail.com' })
+      mockResolveAuthUser.mockResolvedValue({ id: 'super-1', email: 'super@pos.com', isSuperAdmin: true })
+      mockCheckUserIsSuperAdmin.mockResolvedValue(true)
       mockGetRouterParam.mockReturnValue('comp-1')
       mockReadBody.mockResolvedValue({ is_active: false })
 
@@ -258,7 +268,8 @@ describe('Company Endpoints', () => {
     })
 
     it('throws 403 when non-super-admin tries to toggle company active status', async () => {
-      mockResolveAuthUser.mockResolvedValue({ id: 'user-1', email: 'cashier@test.com' })
+      mockResolveAuthUser.mockResolvedValue({ id: 'user-1', email: 'cashier@test.com', isSuperAdmin: false })
+      mockCheckUserIsSuperAdmin.mockResolvedValue(false)
       mockGetRouterParam.mockReturnValue('comp-1')
       mockReadBody.mockResolvedValue({ is_active: false })
 
