@@ -1,9 +1,9 @@
 # PRD.md — Product Requirements Document
 # OMK Consignment Point of Sale System
 
-> **Document Status:** Ground-Truth v1.1 — Authoritative source for AI Coding Agent  
-> **Last Updated:** June 2026  
-> **Scope:** MVP (Version 1.0)
+> **Document Status:** HISTORICAL ARCHIVE — MVP v1.0 Initial Plan  
+> **Last Updated:** June 2026 (Superseded by docs/PRD.md)  
+> **Notice:** Dokumen ini merupakan catatan historis MVP awal. Untuk Single Source of Truth PRD hidup yang mencakup seluruh 16 fitur, Multi-Parish Tenancy, Dynamic RBAC, serta Master User Stories & Acceptance Criteria, silakan rujuk langsung ke 👉 [**`docs/PRD.md`**](../../PRD.md).
 
 ---
 

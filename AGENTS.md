@@ -175,11 +175,15 @@ For detailed specifications, inspect the dedicated documents in `docs/`:
 
 | Document | Purpose & Contents |
 |---|---|
-| [**`docs/FEATURES.md`**](./docs/FEATURES.md) | Technical specs and workflows of the 14 LOCKED features. |
-| [**`docs/ARCHITECTURE.md`**](./docs/ARCHITECTURE.md) | Full architectural layout, layer boundaries, and design system specs. |
-| [**`docs/DB_SCHEMA.md`**](./docs/DB_SCHEMA.md) | Database schema, RPC functions, triggers, views, and RLS policies. |
+| [**`docs/README.md`**](./docs/README.md) | Master Documentation Hub & Fast Lookup Directory across the entire repository. |
+| [**`docs/PRD.md`**](./docs/PRD.md) | Living Master PRD: Problem statement, 5 personas, KPIs, consignment rules, 16 features, and full BDD User Stories & Acceptance Criteria. |
+| [**`docs/API_CONTRACTS.md`**](./docs/API_CONTRACTS.md) | Master API Reference: Nitro REST Endpoints, `X-Company-Id` header protocol, and Supabase RPC signatures. |
+| [**`docs/UI_UX_SPECIFICATION.md`**](./docs/UI_UX_SPECIFICATION.md) | Master UI/UX Design System: Color tokens, JetBrains Mono currency presets, 48px touch ergonomics, 7 primitives, and ASCII layout wireframes. |
+| [**`docs/FEATURES.md`**](./docs/FEATURES.md) | Technical specs and registry of the 16 LOCKED features (F-01 to F-16). |
+| [**`docs/ARCHITECTURE.md`**](./docs/ARCHITECTURE.md) | Full architectural layout, layer boundaries, and runtime system design. |
+| [**`docs/DB_SCHEMA.md`**](./docs/DB_SCHEMA.md) | Database schema, RPC functions, triggers, views, and multi-tenant RLS policies. |
 | [**`docs/USER_FLOWS.md`**](./docs/USER_FLOWS.md) | Complete user journey and state flows for cashier & admin. |
-| [**`docs/plans/completed/PRD_v1_MVP.md`**](./docs/plans/completed/PRD_v1_MVP.md) | Historical MVP v1.0 PRD and business domain foundation. |
+| [**`docs/plans/completed/`**](./docs/plans/completed/) | Historical archive of past implementation plans (PRD MVP v1, Multi-Company, Dynamic RBAC). |
 | [**`docs/plans/proposed/`**](./docs/plans/proposed/) | Future feature proposals and architectural drafts. |
 
 
