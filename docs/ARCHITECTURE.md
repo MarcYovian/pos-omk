@@ -14,21 +14,26 @@ pos-omk/
 │   ├── app.vue                       # Root Vue component (VitePwaManifest, layout wrapper, toast host)
 │   ├── assets/css/main.css           # Global stylesheet & Tailwind CSS directives
 │   ├── components/                   # Reusable UI components
-│   │   └── ui/                       # Atomic design primitives (AppButton, AppInput, Modal, Toast)
-│   ├── composables/                  # Vue composables (Stateful logic & browser integrations)
+│   │   └── ui/                       # Atomic primitives (AppButton, AppInput, Modal, Toast, CompanySwitcher, ProfileDropdown, OfflineBanner)
+│   ├── composables/                  # Vue composables (useApi, useNetworkStatus, useOfflineQueue, useSessionDate, useSupabase, useToast, useCurrencyFormat)
 │   ├── layouts/                      # Page layout templates
-│   │   └── admin.vue                 # Admin layout (grouped navigation sidebar & live session widget)
-│   ├── middleware/                   # Route guards (auth.ts, admin.ts)
-│   ├── pages/                        # File-based routing (/pos.vue, /admin/*, /login.vue, etc.)
-│   ├── stores/                       # Pinia stores in-memory (Cart, Auth, Session, Products, etc.)
+│   │   └── admin.vue                 # Admin layout (grouped navigation sidebar, parish switcher, & session status widget)
+│   ├── middleware/                   # Route guards (auth.ts, admin.ts, permission.ts)
+│   ├── pages/                        # File-based routing (/pos.vue, /admin/*, /admin/roles.vue, /admin/permissions.vue, /admin/settings/company.vue, /login.vue, /umkm/performance/*)
+│   ├── stores/                       # Pinia stores in-memory (auth, cart, session, products, umkm, company, cashFlow, payment, history)
 │   ├── types/                        # Client-side TypeScript contracts (app.ts, database.types.ts, pos.ts)
 │   └── utils/                        # Pure stateless helper functions (currency.ts, date.ts, report.ts)
 ├── server/                           # Nitro Backend Server (Nuxt 4)
-│   ├── api/users/                    # REST endpoints for user management (Supabase Service Role)
-│   └── utils/                        # Server utilities (requireAdmin.ts, password.ts)
-├── shared/types/                     # Shared TypeScript schemas between client and Nitro server
+│   ├── api/                          # Server REST endpoints (Supabase Service Role)
+│   │   ├── users/                    # User account provisioning, status toggle, passwords & permission overrides
+│   │   ├── companies/                # Multi-parish management, active company profile & settings
+│   │   ├── roles/                    # Custom & system roles CRUD and permission mapping
+│   │   ├── permissions/              # System permissions catalog CRUD
+│   │   └── public/                   # Public unauthenticated endpoints (umkm-performance)
+│   └── utils/                        # Server utilities (requireAdmin.ts, requirePermission.ts, tenantResolver.ts, rbacCache.ts, password.ts)
+├── shared/types/                     # Shared TypeScript schemas (tenant.ts, users.ts)
 ├── public/                           # Public static web assets (PWA icons, manifest, favicon)
-├── docs/                             # Ground-truth documentation & plans (FEATURES, ARCHITECTURE, DB_SCHEMA, etc.)
+├── docs/                             # Ground-truth documentation & plans (FEATURES, ARCHITECTURE, DB_SCHEMA, USER_FLOWS)
 ├── test/                             # Mocks & Vitest test utilities
 ├── nuxt.config.ts                    # Main Nuxt 4 configuration file
 ├── tailwind.config.ts                # Tailwind CSS theme, font, and color configuration
@@ -42,20 +47,30 @@ pos-omk/
 
 - **`app/components/ui/`**: 
   - Strictly for pure presentational atomic UI components without *business logic*.
-  - **Forbidden** from invoking Pinia stores or the Supabase client directly.
-  - Components receive data exclusively via `props` and communicate interactions via `emits`.
+  - **Forbidden** from invoking Pinia stores or the Supabase client directly (with the ergonomic exception of `CompanySwitcher` and `ProfileDropdown` that trigger store actions via UI events).
+  - Components receive data via `props` and communicate interactions via `emits`.
 - **`app/composables/`**: 
   - Encapsulates stateful reactive logic, browser API bindings (IndexedDB, online/offline events), or UI toast controllers.
-  - Must follow the `use*` prefix naming convention (e.g. `useNetworkStatus`, `useOfflineQueue`).
+  - `useApi()` provides a unified `$fetch` wrapper that automatically propagates the user's `Bearer` authorization token and the active tenant header `X-Company-Id`.
+  - Must follow the `use*` prefix naming convention (e.g. `useNetworkStatus`, `useOfflineQueue`, `useApi`).
 - **`app/stores/`**: 
   - Primary home for client-side business logic, global state, and Supabase RPC invocations.
   - RPC calls that mutate database state should be encapsulated within store actions.
+  - Multi-tenant state in `useCompanyStore` synchronizes the active company with `localStorage` (`omk_active_company_id`) and cascades store reloads.
 - **`app/utils/`**: 
   - Exclusively pure, deterministic, stateless functions without reactive Vue dependencies (no `ref`, `computed`, or side-effects).
   - Examples: currency formatting (`currency.ts`), Jakarta timezone resolution (`date.ts`), WhatsApp text template generator (`report.ts`).
 - **`server/api/`**: 
-  - Nitro backend endpoints executing sensitive administrative actions with `SUPABASE_SECRET_KEY` (service role).
+  - Nitro backend endpoints executing sensitive administrative operations with `SUPABASE_SECRET_KEY` (service role).
+  - Grouped by resource domain: `users`, `companies`, `roles`, `permissions`, and `public`.
   - **Strictly forbidden** from leaking or importing the service role secret into client-side code (`app/`).
+- **`server/utils/`**: 
+  - Reusable backend guards and helpers:
+    - `tenantResolver.ts`: Resolves and validates caller's active parish context (`TenantContext`) from the `X-Company-Id` header and database memberships.
+    - `requirePermission.ts`: Enforces granular permission verification on endpoints.
+    - `rbacCache.ts`: High-performance in-memory cache with TTLs and event-driven invalidation to minimize database roundtrips.
+    - `requireAdmin.ts`: Validates administrative caller credentials.
+    - `password.ts`: Generates secure random passwords for cashier provisioning.
 
 ---
 
@@ -88,5 +103,6 @@ The interface is built with a **Mobile-First** approach optimized for mid-range 
 - `AppToast.vue`: Floating toast notification banner supporting success, warning, and danger types.
 - `OfflineBanner.vue`: Real-time network banner indicating offline status.
 - `ProfileDropdown.vue`: User session dropdown supporting password management and logout.
+- `CompanySwitcher.vue`: Multi-tenant parish organization dropdown switcher supporting `sidebar`, `topbar`, and `mobile` variants.
 
 > ⚠️ **Critical Constraint:** Installing third-party UI libraries (PrimeVue, Vuetify, Quasar, DaisyUI) or Axios is strictly forbidden. The UI is built purely with Tailwind CSS and the custom components above.

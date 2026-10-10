@@ -98,6 +98,23 @@ Views (4 total):
 
 ```mermaid
 erDiagram
+    companies ||--o{ company_users : "employs"
+    companies ||--o{ umkm : "scopes"
+    companies ||--o{ master_products : "scopes"
+    companies ||--o{ sessions : "scopes"
+    companies ||--o{ session_products : "scopes"
+    companies ||--o{ transactions : "scopes"
+    companies ||--o{ reconciliation : "scopes"
+    companies ||--o{ cash_flows : "scopes"
+    companies ||--o{ umkm_payments : "scopes"
+    companies ||--o{ user_permissions : "scopes"
+
+    roles ||--o{ company_users : "assigns"
+    roles ||--o{ role_permissions : "has"
+    permissions ||--o{ role_permissions : "granted_to"
+    permissions ||--o{ user_permissions : "overridden_in"
+    roles ||--o{ user_roles : "assigns_global"
+
     umkm ||--o{ master_products : "owns"
     umkm ||--o{ umkm_payments : "receives"
     master_products ||--o{ session_products : "allocated_to"
@@ -111,8 +128,70 @@ erDiagram
     transactions ||--o{ cash_flows : "triggers_income"
     umkm_payments ||--o{ cash_flows : "triggers_expense"
 
+    companies {
+        uuid id PK
+        varchar name
+        varchar slug UK
+        text logo_url
+        text address
+        varchar phone
+        varchar email
+        jsonb settings
+        boolean is_active
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    company_users {
+        uuid id PK
+        uuid company_id FK
+        uuid user_id FK
+        uuid role_id FK
+        boolean is_default
+        boolean is_active
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    roles {
+        uuid id PK
+        varchar code UK
+        varchar name
+        text description
+        boolean is_system
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    permissions {
+        uuid id PK
+        varchar code UK
+        varchar name
+        varchar module
+        text description
+        timestamptz created_at
+    }
+
+    role_permissions {
+        uuid role_id PK,FK
+        uuid permission_id PK,FK
+    }
+
+    user_roles {
+        uuid user_id PK,FK
+        uuid role_id PK,FK
+    }
+
+    user_permissions {
+        uuid company_id PK,FK
+        uuid user_id PK,FK
+        uuid permission_id PK,FK
+        boolean is_granted
+    }
+
     umkm {
         uuid id PK
+        uuid company_id FK
         varchar nama_umkm UK
         varchar kontak_wa
         boolean is_active
@@ -121,6 +200,7 @@ erDiagram
 
     master_products {
         uuid id PK
+        uuid company_id FK
         uuid umkm_id FK
         varchar nama_produk
         integer harga_asli
@@ -131,7 +211,8 @@ erDiagram
 
     sessions {
         uuid id PK
-        date session_date UK
+        uuid company_id FK
+        date session_date
         varchar status
         uuid opened_by FK
         uuid closed_by FK
@@ -142,6 +223,7 @@ erDiagram
 
     session_products {
         uuid id PK
+        uuid company_id FK
         uuid session_id FK
         uuid master_product_id FK
         integer harga_asli
@@ -154,6 +236,7 @@ erDiagram
 
     transactions {
         uuid id PK
+        uuid company_id FK
         uuid session_id FK
         uuid cashier_id FK
         integer total_harga_jual
@@ -177,6 +260,7 @@ erDiagram
 
     reconciliation {
         uuid id PK
+        uuid company_id FK
         uuid session_id FK
         uuid session_product_id FK
         integer stok_fisik
@@ -188,6 +272,7 @@ erDiagram
 
     cash_flows {
         uuid id PK
+        uuid company_id FK
         varchar type
         varchar source
         integer amount
@@ -199,6 +284,7 @@ erDiagram
 
     umkm_payments {
         uuid id PK
+        uuid company_id FK
         uuid umkm_id FK
         integer amount
         varchar status
@@ -332,30 +418,33 @@ CREATE TRIGGER trg_master_products_updated_at
 
 ---
 
-### 3.3 Table: `sessions`
+### 3.5 Table: `sessions`
 
-One record per Sunday sales session. Controls POS availability.
+One record per Sunday sales session scoped to each company. Controls POS availability.
 
 ```sql
 CREATE TABLE public.sessions (
   id            UUID          DEFAULT gen_random_uuid() PRIMARY KEY,
-  session_date  DATE          NOT NULL UNIQUE,    -- Unique: 1 session per date
+  company_id    UUID          NOT NULL REFERENCES public.companies(id) ON DELETE RESTRICT,
+  session_date  DATE          NOT NULL,
   status        VARCHAR(10)   NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
   opened_by     UUID          REFERENCES auth.users(id) ON DELETE SET NULL,
   closed_by     UUID          REFERENCES auth.users(id) ON DELETE SET NULL,
   opened_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
   closed_at     TIMESTAMPTZ,
-  created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+  created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  CONSTRAINT sessions_company_date_unique UNIQUE (company_id, session_date)
 );
 
-COMMENT ON TABLE public.sessions IS 'One record per Sunday session. Controls whether POS accepts transactions';
+COMMENT ON TABLE public.sessions IS 'One record per Sunday session per company. Controls whether POS accepts transactions';
 ```
 
 **Constraints & Notes:**
 | Column | Type | Nullable | Default | Notes |
 |---|---|---|---|---|
 | `id` | `uuid` | NOT NULL | `gen_random_uuid()` | PK |
-| `session_date` | `date` | NOT NULL | — | UNIQUE constraint |
+| `company_id` | `uuid` | NOT NULL | — | FK → `companies.id` |
+| `session_date` | `date` | NOT NULL | — | Unique per company |
 | `status` | `varchar(10)` | NOT NULL | `'open'` | `'open'` or `'closed'` |
 | `opened_by` | `uuid` | NULL | — | FK → `auth.users.id` |
 | `closed_by` | `uuid` | NULL | — | FK → `auth.users.id` |
@@ -365,13 +454,14 @@ COMMENT ON TABLE public.sessions IS 'One record per Sunday session. Controls whe
 
 ---
 
-### 3.4 Table: `session_products`
+### 3.6 Table: `session_products`
 
-Specific items active for a session with live stock tracking.
+Specific items active for a session with live stock tracking, scoped to `company_id`.
 
 ```sql
 CREATE TABLE public.session_products (
   id                  UUID          DEFAULT gen_random_uuid() PRIMARY KEY,
+  company_id          UUID          NOT NULL REFERENCES public.companies(id) ON DELETE RESTRICT,
   session_id          UUID          NOT NULL REFERENCES public.sessions(id) ON DELETE RESTRICT,
   master_product_id   UUID          NOT NULL REFERENCES public.master_products(id) ON DELETE RESTRICT,
   harga_asli          INTEGER       NOT NULL CHECK (harga_asli > 0),
@@ -394,6 +484,7 @@ CREATE TRIGGER trg_init_stok_session_products
 | Column | Type | Nullable | Default | Notes |
 |---|---|---|---|---|
 | `id` | `uuid` | NOT NULL | `gen_random_uuid()` | PK |
+| `company_id` | `uuid` | NOT NULL | — | FK → `companies.id` |
 | `session_id` | `uuid` | NOT NULL | — | FK → `sessions.id` |
 | `master_product_id`| `uuid` | NOT NULL | — | FK → `master_products.id` |
 | `harga_asli` | `integer` | NOT NULL | — | Cost snapshot for this session |
@@ -405,13 +496,14 @@ CREATE TRIGGER trg_init_stok_session_products
 
 ---
 
-### 3.5 Table: `transactions`
+### 3.7 Table: `transactions`
 
-Header records for completed checkout orders.
+Header records for completed checkout orders, scoped to `company_id`.
 
 ```sql
 CREATE TABLE public.transactions (
   id                 UUID         DEFAULT gen_random_uuid() PRIMARY KEY,
+  company_id         UUID         NOT NULL REFERENCES public.companies(id) ON DELETE RESTRICT,
   session_id         UUID         NOT NULL REFERENCES public.sessions(id) ON DELETE RESTRICT,
   cashier_id         UUID         REFERENCES auth.users(id) ON DELETE SET NULL,
   total_harga_jual   INTEGER      NOT NULL,
@@ -430,7 +522,7 @@ CREATE TRIGGER trg_cash_flow_from_transaction
 
 ---
 
-### 3.6 Table: `transaction_details`
+### 3.8 Table: `transaction_details`
 
 Line items for each transaction. Completely immutable after insert.
 
@@ -450,13 +542,14 @@ CREATE TABLE public.transaction_details (
 
 ---
 
-### 3.7 Table: `reconciliation`
+### 3.9 Table: `reconciliation`
 
-Physical stock counts recorded at session closure.
+Physical stock counts recorded at session closure, scoped to `company_id`.
 
 ```sql
 CREATE TABLE public.reconciliation (
   id                 UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  company_id         UUID        NOT NULL REFERENCES public.companies(id) ON DELETE RESTRICT,
   session_id         UUID        NOT NULL REFERENCES public.sessions(id) ON DELETE RESTRICT,
   session_product_id UUID        NOT NULL REFERENCES public.session_products(id) ON DELETE RESTRICT,
   stok_fisik         INTEGER     NOT NULL,
@@ -469,13 +562,14 @@ CREATE TABLE public.reconciliation (
 
 ---
 
-### 3.8 Table: `cash_flows`
+### 3.10 Table: `cash_flows`
 
-Ledger for cash tracking. Supports transactions, manual entries (initial cash float, supplies), and consignment payments.
+Ledger for cash tracking. Supports transactions, manual entries (initial cash float, supplies), and consignment payments, scoped to `company_id`.
 
 ```sql
 CREATE TABLE public.cash_flows (
   id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  company_id  UUID        NOT NULL REFERENCES public.companies(id) ON DELETE RESTRICT,
   type        VARCHAR(20) NOT NULL CHECK (type IN ('income', 'expense')),
   source      VARCHAR(20) NOT NULL CHECK (source IN ('transaction', 'manual', 'payment')),
   amount      INTEGER     NOT NULL CHECK (amount > 0),
@@ -488,13 +582,14 @@ CREATE TABLE public.cash_flows (
 
 ---
 
-### 3.9 Table: `umkm_payments`
+### 3.11 Table: `umkm_payments`
 
-Settlement ledger for paying UMKM partners their consignment remittance.
+Settlement ledger for paying UMKM partners their consignment remittance, scoped to `company_id`.
 
 ```sql
 CREATE TABLE public.umkm_payments (
   id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  company_id  UUID        NOT NULL REFERENCES public.companies(id) ON DELETE RESTRICT,
   umkm_id     UUID        NOT NULL REFERENCES public.umkm(id) ON DELETE RESTRICT,
   amount      INTEGER     NOT NULL CHECK (amount > 0),
   status      VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid')),
@@ -595,7 +690,7 @@ BEGIN
 END;
 $$;
 
--- 4.0.3 get_user_role: Resolves active tenant role from company_users, with fallback to global role/JWT
+-- 4.0.3 get_user_role: Resolves active tenant role from company_users, with fallback to global user_roles
 CREATE OR REPLACE FUNCTION public.get_user_role()
 RETURNS TEXT
 LANGUAGE plpgsql
@@ -606,13 +701,14 @@ DECLARE
   v_role_code TEXT;
   v_cid UUID;
 BEGIN
-  -- 1. Super Admin is always 'admin'
+  -- 1. Super Admin is always 'super_admin'
   IF public.is_super_admin() THEN
-    RETURN 'admin';
+    RETURN 'super_admin';
   END IF;
 
   -- 2. Check company_users for current active company
   v_cid := public.get_current_user_company_id();
+
   IF v_cid IS NOT NULL AND auth.uid() IS NOT NULL THEN
     SELECT r.code INTO v_role_code
     FROM public.company_users cu
@@ -1211,16 +1307,18 @@ $$;
 
 ### 4.8 `get_weekly_trends`
 
-Returns historical financial performance for closed sessions scoped to active company.
+Returns historical financial performance for closed sessions scoped to the caller's active company.
 
 ```sql
-CREATE OR REPLACE FUNCTION public.get_weekly_trends(p_limit integer, p_company_id uuid)
+CREATE OR REPLACE FUNCTION public.get_weekly_trends(
+  p_limit INTEGER DEFAULT 10
+)
 RETURNS TABLE(session_id uuid, session_date date, gross_revenue bigint, total_remittance bigint, omk_net_profit bigint)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  v_cid UUID := COALESCE(p_company_id, public.get_current_user_company_id());
+  v_cid UUID := public.get_current_user_company_id();
 BEGIN
   RETURN QUERY
   SELECT 
@@ -1234,17 +1332,6 @@ BEGIN
     AND (v_cid IS NULL OR shs.company_id = v_cid)
   ORDER BY shs.session_date DESC
   LIMIT p_limit;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.get_weekly_trends(p_limit integer DEFAULT 10)
-RETURNS TABLE(session_id uuid, session_date date, gross_revenue bigint, total_remittance bigint, omk_net_profit bigint)
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT * FROM public.get_weekly_trends(p_limit, public.get_current_user_company_id());
 END;
 $$;
 ```
@@ -1704,29 +1791,32 @@ ALTER TABLE public.user_permissions    ENABLE ROW LEVEL SECURITY;
 | Table | Policy Name | Command | Role / Condition | Purpose |
 |---|---|---|---|---|
 | `companies` | `super_admin_manage_companies` | ALL | `public.is_super_admin()` | Super admin full CRUD over companies |
-| `companies` | `tenant_select_companies` | SELECT | `public.is_super_admin() OR id IN (SELECT company_id FROM company_users WHERE user_id = auth.uid() AND is_active = TRUE)` | Members can view their companies |
-| `company_users` | `tenant_select_company_users` | SELECT | `public.is_super_admin() OR company_id = public.get_current_user_company_id() OR user_id = auth.uid()` | View memberships within tenant |
-| `company_users` | `tenant_manage_company_users` | ALL | `public.is_super_admin() OR (company_id = public.get_current_user_company_id() AND public.authorize('manage_users'))` | Admin manages company members |
-| `umkm` | `tenant_select_umkm` | SELECT | `company_id = public.get_current_user_company_id() OR public.is_super_admin()` | View partners in current tenant |
-| `umkm` | `tenant_manage_umkm` | ALL | `(company_id = public.get_current_user_company_id() AND public.authorize('manage_umkm')) OR public.is_super_admin()` | Admin manages partners |
-| `master_products` | `tenant_select_master_products` | SELECT | `company_id = public.get_current_user_company_id() OR public.is_super_admin()` | Read catalog within tenant |
-| `master_products` | `tenant_manage_master_products` | ALL | `(company_id = public.get_current_user_company_id() AND public.authorize('manage_products')) OR public.is_super_admin()` | Admin manages master products |
-| `sessions` | `tenant_select_sessions` | SELECT | `company_id = public.get_current_user_company_id() OR public.is_super_admin()` | Read session list & status |
-| `sessions` | `tenant_manage_sessions` | ALL | `(company_id = public.get_current_user_company_id() AND public.authorize('manage_sessions')) OR public.is_super_admin()` | Admin manages sessions |
-| `session_products`| `tenant_select_session_products` | SELECT | `company_id = public.get_current_user_company_id() OR public.is_super_admin()` | View session items |
-| `session_products`| `tenant_manage_session_products` | ALL | `(company_id = public.get_current_user_company_id() AND public.authorize('manage_sessions')) OR public.is_super_admin()` | Admin manages stock allocation |
-| `transactions` | `tenant_select_transactions` | SELECT | `(company_id = public.get_current_user_company_id() AND (public.authorize('view_transactions') OR public.authorize('view_reports'))) OR public.is_super_admin()` | View transactions |
-| `transactions` | `tenant_manage_transactions` | ALL | `(company_id = public.get_current_user_company_id() AND public.authorize('manage_sessions')) OR public.is_super_admin()` | Admin manages transactions |
-| `transaction_details`| `tenant_select_transaction_details` | SELECT | `EXISTS (SELECT 1 FROM transactions t WHERE t.id = transaction_details.transaction_id AND (t.company_id = public.get_current_user_company_id() OR public.is_super_admin())) AND (public.authorize('view_transactions') OR public.authorize('view_reports') OR public.is_super_admin())` | Protects line items and cost |
-| `reconciliation` | `tenant_select_reconciliation` | SELECT | `company_id = public.get_current_user_company_id() OR public.is_super_admin()` | View reconciliation rows |
-| `reconciliation` | `tenant_manage_reconciliation` | ALL | `(company_id = public.get_current_user_company_id() AND public.authorize('manage_sessions')) OR public.is_super_admin()` | Admin records stock count |
-| `cash_flows` | `tenant_select_cash_flows` | SELECT | `company_id = public.get_current_user_company_id() OR public.is_super_admin()` | View cash flow ledger |
-| `cash_flows` | `tenant_insert_cash_flows` | INSERT | `(company_id = public.get_current_user_company_id() AND auth.uid() = recorded_by) OR public.is_super_admin()` | Record cash flow entries |
-| `cash_flows` | `tenant_update_cash_flows` | UPDATE | `(company_id = public.get_current_user_company_id() AND public.authorize('manage_cash_flow')) OR public.is_super_admin()` | Admin updates cash flows |
-| `umkm_payments` | `tenant_select_umkm_payments` | SELECT | `company_id = public.get_current_user_company_id() OR public.is_super_admin()` | View payment records |
-| `umkm_payments` | `tenant_manage_umkm_payments` | ALL | `(company_id = public.get_current_user_company_id() AND public.authorize('manage_umkm_payments')) OR public.is_super_admin()` | Record and manage payouts |
-| `user_permissions` | `tenant_select_user_permissions` | SELECT | `user_id = auth.uid() OR company_id = public.get_current_user_company_id() OR public.is_super_admin()` | View custom permissions |
-| `user_permissions` | `tenant_manage_user_permissions` | ALL | `(company_id = public.get_current_user_company_id() AND public.authorize('manage_users')) OR public.is_super_admin()` | Admin grants/revokes permissions |
+| `companies` | `tenant_companies_select` | SELECT | `id = public.get_current_user_company_id() OR public.is_super_admin()` | Members can view their active company |
+| `companies` | `tenant_companies_update` | UPDATE | `public.is_super_admin() OR (id = public.get_current_user_company_id() AND public.get_user_role() = 'admin')` | Admin updates parish profile |
+| `companies` | `tenant_companies_insert` | INSERT | `public.is_super_admin()` | Super admin provisions new parish |
+| `company_users` | `tenant_company_users_select` | SELECT | `user_id = auth.uid() OR company_id = public.get_current_user_company_id() OR public.is_super_admin()` | View memberships within tenant |
+| `company_users` | `tenant_company_users_all` | ALL | `public.is_super_admin() OR (company_id = public.get_current_user_company_id() AND (public.get_user_role() = 'admin' OR public.authorize('users:manage')))` | Admin manages company members |
+| `umkm` | `tenant_umkm_select` | SELECT | `company_id = public.get_current_user_company_id() OR public.is_super_admin()` | View partners in current tenant |
+| `umkm` | `tenant_umkm_all` | ALL | `((company_id = public.get_current_user_company_id()) AND (public.get_user_role() = 'admin' OR public.authorize('products:manage'))) OR public.is_super_admin()` | Admin manages partners |
+| `master_products` | `tenant_master_products_select` | SELECT | `company_id = public.get_current_user_company_id() OR public.is_super_admin()` | Read catalog within tenant |
+| `master_products` | `tenant_master_products_all` | ALL | `((company_id = public.get_current_user_company_id()) AND (public.get_user_role() = 'admin' OR public.authorize('products:manage'))) OR public.is_super_admin()` | Admin manages master products |
+| `sessions` | `tenant_sessions_select` | SELECT | `company_id = public.get_current_user_company_id() OR public.is_super_admin()` | Read session list & status |
+| `sessions` | `tenant_sessions_all` | ALL | `((company_id = public.get_current_user_company_id()) AND (public.get_user_role() = 'admin' OR public.authorize('session:manage'))) OR public.is_super_admin()` | Admin manages sessions |
+| `session_products`| `tenant_session_products_select` | SELECT | `company_id = public.get_current_user_company_id() OR public.is_super_admin()` | View session items |
+| `session_products`| `tenant_session_products_all` | ALL | `((company_id = public.get_current_user_company_id()) AND (public.get_user_role() = 'admin' OR public.authorize('session_stock:manage') OR public.authorize('session:manage'))) OR public.is_super_admin()` | Admin manages stock allocation |
+| `transactions` | `tenant_transactions_select` | SELECT | `((company_id = public.get_current_user_company_id()) AND (public.get_user_role() = 'admin' OR public.authorize('cashflow:view'))) OR public.is_super_admin()` | View transactions |
+| `transactions` | `tenant_transactions_insert` | INSERT | `company_id = public.get_current_user_company_id() OR public.is_super_admin()` | Cashier/Admin inserts orders |
+| `transaction_details`| `td_read_admin` | SELECT | `EXISTS (SELECT 1 FROM transactions t WHERE t.id = transaction_details.transaction_id AND (t.company_id = public.get_current_user_company_id() OR public.is_super_admin())) AND (public.get_user_role() = 'admin' OR public.authorize('cashflow:view') OR public.is_super_admin())` | Protects line items and cost |
+| `reconciliation` | `tenant_reconciliation_select` | SELECT | `company_id = public.get_current_user_company_id() OR public.is_super_admin()` | View reconciliation rows |
+| `reconciliation` | `tenant_reconciliation_all` | ALL | `((company_id = public.get_current_user_company_id()) AND (public.get_user_role() = 'admin' OR public.authorize('session:manage'))) OR public.is_super_admin()` | Admin records stock count |
+| `cash_flows` | `tenant_cash_flows_select` | SELECT | `company_id = public.get_current_user_company_id() OR public.is_super_admin()` | View cash flow ledger |
+| `cash_flows` | `tenant_cash_flows_insert` | INSERT | `(company_id = public.get_current_user_company_id() AND auth.uid() = recorded_by) OR public.is_super_admin()` | Record cash flow entries |
+| `cash_flows` | `tenant_cash_flows_update` | UPDATE | `((company_id = public.get_current_user_company_id()) AND (public.get_user_role() = 'admin' OR public.authorize('cashflow:manage'))) OR public.is_super_admin()` | Admin updates cash flows |
+| `umkm_payments` | `tenant_umkm_payments_select` | SELECT | `company_id = public.get_current_user_company_id() OR public.is_super_admin()` | View payment records |
+| `umkm_payments` | `tenant_umkm_payments_all` | ALL | `((company_id = public.get_current_user_company_id()) AND (public.get_user_role() = 'admin' OR public.authorize('umkm:payout'))) OR public.is_super_admin()` | Record and manage payouts |
+| `user_permissions` | `tenant_user_permissions_select` | SELECT | `user_id = auth.uid() OR company_id = public.get_current_user_company_id() OR public.is_super_admin()` | View custom permissions |
+| `user_permissions` | `tenant_user_permissions_all` | ALL | `public.is_super_admin() OR (company_id = public.get_current_user_company_id() AND (public.get_user_role() = 'admin' OR public.authorize('users:manage')))` | Admin grants/revokes permissions |
+
 
 ---
 

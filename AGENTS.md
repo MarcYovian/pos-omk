@@ -127,7 +127,7 @@ pos-omk/
 - **Atomic Stock Mutation:** Never mutate stock or insert transactions directly from client — always use atomic database RPC `complete_transaction`.
 - **Client Supabase Client:** Never initialize Supabase client manually with `createClient()` in frontend — always use auto-imported `useSupabase()`.
 - **Secret Key Protection:** Never expose `SUPABASE_SECRET_KEY` (service role) to client code — strictly for Nitro server (`server/`) and administrative scripts.
-- **Storage Isolation:** Never use `localStorage` for cart or session — cart is in-memory Pinia store, offline queue is in IndexedDB (`idb`).
+- **Storage Isolation:** Never use `localStorage` for cart or session — cart is in-memory Pinia store, offline queue is in IndexedDB (`idb`). Active company ID persistence (`omk_active_company_id`) in `localStorage` is permitted strictly for tenant context persistence.
 - **Type Safety:** Never use `any` type in TypeScript.
 - **Timezone Safety:** Never use UTC time or `new Date().toISOString()` for session date — always use `getTodayJakarta()`.
 - **Financial Calculations:** Never calculate official session financial totals on frontend — always use database RPC `get_session_financial_summary`.
@@ -140,7 +140,7 @@ pos-omk/
 
 ## 9. Completed & Locked Features Reference
 
-The following 14 features are fully implemented, tested, and marked as **LOCKED** (see [docs/FEATURES.md](./docs/FEATURES.md) for full technical specifications):
+The following 16 features are fully implemented, tested, and marked as **LOCKED** (see [docs/FEATURES.md](./docs/FEATURES.md) for full technical specifications):
 1. **Auth & RBAC:** Login, role guards, self-service password change, password reset.
 2. **Real-time POS Cashier Screen (`/pos`):** Active products grid, search & filter, cart, numpad, change calculation, Cash & QRIS payment, atomic RPC checkout, realtime stock sync.
 3. **PWA & Offline Queue:** Workbox service worker, IndexedDB queue, auto-sync on reconnect, network status banner.
@@ -153,8 +153,11 @@ The following 14 features are fully implemented, tested, and marked as **LOCKED*
 10. **Sales Analytics (`/admin/analytics`):** Weekly sales trend, UMKM profit doughnut chart, top products bar chart.
 11. **Cash Flow Ledger (`/admin/cash-flow`):** Automated cashier income entries, manual income/expense, running balance.
 12. **UMKM Settlements & Payments (`/admin/payments`):** Remittance tracking, payment entry, automated cash flow ledger expense trigger.
-13. **Public UMKM Performance Dashboard (`/umkm/performance/[id]`):** Auth-free transparent sales dashboard shareable via WhatsApp.
-14. **User Management (`/admin/users`):** Cashier account provisioning, temp passwords, status toggle, password reset links.
+13. **Public UMKM Performance Dashboard (`/umkm/performance/[id]`):** Auth-free transparent sales dashboard shareable via WhatsApp, powered by secure Nitro endpoint.
+14. **User Management (`/admin/users`):** Cashier account provisioning, temp passwords, status toggle, password reset links, user permission overrides modal.
+15. **Multi-Parish / Multi-Company Tenancy:** Isolated data per parish, CompanySwitcher in navigation, parish profile & receipt settings, automatic `X-Company-Id` header propagation.
+16. **Dynamic Roles & Permissions Catalog:** Custom & system roles CRUD (`/admin/roles`), granular system permissions catalog (`/admin/permissions`), multi-tier in-memory RBAC caching.
+
 
 ---
 

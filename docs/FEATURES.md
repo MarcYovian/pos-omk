@@ -7,17 +7,19 @@ This document is the official registry of all features that are **fully implemen
 
 ---
 
-## List of Implemented Features (F-01 to F-14)
+## List of Implemented Features (F-01 to F-16)
 
 ### F-01: Authentication & Role-Based Access Control (RBAC)
 - **Status:** `LOCKED`
 - **Routes:** `/login`, `/change-password`, `/reset-password`
-- **Middleware:** `app/middleware/auth.ts`, `app/middleware/admin.ts`
+- **Middleware:** `app/middleware/auth.ts`, `app/middleware/admin.ts`, `app/middleware/permission.ts`
 - **Description:**
-  - Email and password login powered by Supabase Auth.
-  - Strict role segregation: `admin` (unrestricted access to `/admin` suite) and `cashier` (access restricted to `/pos`).
-  - Automated route middleware guarding unauthenticated or unauthorized route access.
+  - Email and password login powered by Supabase Auth with Jakarta timezone awareness.
+  - Pure database-driven RBAC: Roles (`roles`), granular permissions (`permissions`), and user assignments (`company_users`, `user_roles`, `user_permissions`).
+  - Roles supported: `super_admin` (platform super admin), `admin` (parish administrator), `cashier` (POS cashier), and dynamic custom roles.
+  - Automated route guards: `auth.ts` (authentication & force password change redirect), `admin.ts` (administrative privilege check), and `permission.ts` (granular `to.meta.permission` evaluation via `authStore.can()`).
   - Self-service password change (`/change-password`) and email recovery password reset flow (`/reset-password`).
+
 
 ### F-02: Real-time POS Cashier Screen
 - **Status:** `LOCKED`
@@ -127,18 +129,48 @@ This document is the official registry of all features that are **fully implemen
 ### F-13: Public UMKM Sales Performance Portal
 - **Status:** `LOCKED`
 - **Routes:** `/umkm/performance/[umkm_id]`
-- **RPCs:** `get_umkm_product_performance`, `get_umkm_session_history`
+- **Nitro Backend & RPCs:** `server/api/public/umkm-performance/[id].get.ts`, RPC `get_umkm_product_performance`, `get_umkm_session_history`
 - **Description:**
   - Mobile-first, public dashboard view requiring zero authentication (safe for vendor partners).
   - Shareable directly to UMKM owners via WhatsApp links.
-  - Visualizes all-time sold units, cumulative remittance, product sales breakdowns, and expandable session logs.
+  - Secure data fetching powered by Nitro backend endpoint using Service Role with automatic fallback to direct client RPC queries.
+  - Visualizes all-time sold units, cumulative remittance, product sales breakdowns, and expandable session logs with physical count details.
 
 ### F-14: User & Cashier Account Management
 - **Status:** `LOCKED`
 - **Routes:** `/admin/users`
-- **Nitro Backend:** `server/api/users/*`
+- **Nitro Backend:** `server/api/users/*` (`index.get`, `index.post`, `[id].patch`, `[id].delete`, `[id]/toggle-active`, `[id]/send-reset`, `[id]/send-verification`, `[id]/password-changed`, `[id]/permissions`)
 - **Description:**
-  - Directory of all registered cashier and administrator accounts in Supabase Auth.
-  - Creation of new cashier accounts with random temporary passwords and verification links.
+  - Directory of registered cashier and administrator accounts scoped to the active parish organization.
+  - Creation of new accounts with temporary passwords, role selection (`super_admin`, `admin`, `cashier`, custom roles), and verification links.
   - Account status toggle (`is_active`) to deactivate accounts without deleting transaction history.
-  - Password reset link distribution directly to user emails.
+  - Password reset link distribution directly to user emails and `force_password_change` flag enforcement.
+  - **Granular User Permission Overrides Modal**: Allows administrators to explicitly grant (`is_granted: true`), revoke (`is_granted: false`), or inherit (`null`) specific system permissions per user for the active company.
+
+### F-15: Multi-Parish / Multi-Company Tenancy Architecture
+- **Status:** `LOCKED`
+- **Routes:** `/admin/settings/company`
+- **Components & Stores:** `app/components/ui/CompanySwitcher.vue`, `app/stores/company.ts`, `app/composables/useApi.ts`
+- **Nitro Backend & Utils:** `server/api/companies/*`, `server/utils/tenantResolver.ts`
+- **Database Tables & Security:** Tables `companies`, `company_users`, RLS policies scoped to `company_id`, header injection via `X-Company-Id`.
+- **Description:**
+  - Multi-tenant architecture allowing multiple parishes/organizations to operate independently on a single codebase and database.
+  - Complete data isolation for UMKM partners, products, sessions, transactions, cash flows, and payout records via Row-Level Security (`company_id`).
+  - Dropdown `CompanySwitcher` component in admin sidebar and mobile navigation for seamless switching between accessible parishes.
+  - Reactive global store `useCompanyStore` that persists active company ID in `localStorage` (`omk_active_company_id`) and automatically reloads session, product, and UMKM stores upon company switch.
+  - Parish Profile & Receipt Settings page (`/admin/settings/company`) for configuring parish branding, address, WhatsApp contact, QRIS name, bank information, and receipt footer message.
+  - Platform Super Admin management over all registered companies and active status toggles.
+
+### F-16: Dynamic Roles & Permissions Catalog Management
+- **Status:** `LOCKED`
+- **Routes:** `/admin/roles`, `/admin/permissions`
+- **Nitro Backend:** `server/api/roles/*`, `server/api/permissions/*`, `server/utils/requirePermission.ts`, `server/utils/rbacCache.ts`
+- **Middleware:** `app/middleware/permission.ts`
+- **Database Tables:** `roles`, `permissions`, `role_permissions`, `user_roles`, `user_permissions`
+- **Description:**
+  - Role management dashboard (`/admin/roles`) allowing creation, editing, and deletion of custom roles with module-based permission allocation (`pos`, `catalog`, `session`, `finance`, `reports`, `users`, `roles`, `platform`).
+  - Permissions catalog dashboard (`/admin/permissions`) managing granular system actions with unique code identifiers and module categorization.
+  - High-performance in-memory caching tier in Nitro (`server/utils/rbacCache.ts`) with configurable TTLs and event-driven invalidation on permission/role updates.
+  - Client-side permission evaluation via `authStore.can(permissionCode)` with in-flight request deduplication and 60-second caching.
+  - Server-side endpoint protection via `requirePermission(event, permission)` utility.
+

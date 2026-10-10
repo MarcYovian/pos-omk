@@ -19,6 +19,8 @@
 8. [Global State (Pinia Stores)](#8-global-state-pinia-stores)
 9. [Error States & Edge Cases](#9-error-states--edge-cases)
 10. [Offline Flow](#10-offline-flow)
+11. [Flow 6: Multi-Tenant Parish Switching & Settings](#11-flow-6-multi-tenant-parish-switching--settings)
+12. [Flow 7: Dynamic RBAC & User Permission Overrides](#12-flow-7-dynamic-rbac--user-permission-overrides)
 
 ---
 
@@ -30,33 +32,43 @@
 /change-password         → Change password [AUTH: authenticated]
 /reset-password          → Password recovery [AUTH: public with token]
 /pos                     → Cashier POS screen [AUTH: cashier + admin]
-/admin                   → Admin overview dashboard [AUTH: admin only]
-/admin/history           → Session history & transaction audit logs [AUTH: admin only]
-/admin/analytics         → Sales trends & profit analytics charts [AUTH: admin only]
-/admin/umkm              → Master Data UMKM (CRU) [AUTH: admin only]
-/admin/umkm/[umkm_id]    → Master Products catalog & vendor stats [AUTH: admin only]
-/admin/setup             → Weekly session setup [AUTH: admin only]
-/admin/setup/[umkm_id]   → Session products allocation [AUTH: admin only]
-/admin/dashboard         → Revenue split & session dashboard [AUTH: admin only]
-/admin/cash-flow         → Organizational cash flow ledger [AUTH: admin only]
-/admin/payments          → UMKM settlement payments [AUTH: admin only]
-/admin/reconciliation    → End-of-day stock reconciliation [AUTH: admin only]
-/admin/reports           → WhatsApp report generator [AUTH: admin only]
-/admin/users             → User & cashier management [AUTH: admin only]
+/admin                   → Admin overview dashboard [AUTH: admin / admin-perms]
+/admin/history           → Session history & transaction audit logs [AUTH: admin / cashflow:view]
+/admin/analytics         → Sales trends & profit analytics charts [AUTH: admin / cashflow:view]
+/admin/umkm              → Master Data UMKM (CRU) [AUTH: admin / products:manage]
+/admin/umkm/[umkm_id]    → Master Products catalog & vendor stats [AUTH: admin / products:manage]
+/admin/setup             → Weekly session setup [AUTH: admin / session_stock:manage]
+/admin/setup/[umkm_id]   → Session products allocation [AUTH: admin / session_stock:manage]
+/admin/dashboard         → Revenue split & session dashboard [AUTH: admin / cashflow:view]
+/admin/cash-flow         → Organizational cash flow ledger [AUTH: admin / cashflow:view]
+/admin/payments          → UMKM settlement payments [AUTH: admin / umkm:payout]
+/admin/reconciliation    → End-of-day stock reconciliation [AUTH: admin / session:manage]
+/admin/reports           → WhatsApp report generator [AUTH: admin / reports:view]
+/admin/users             → User & cashier management [AUTH: admin / users:manage]
+/admin/roles             → Dynamic role management [AUTH: admin / roles:manage]
+/admin/permissions       → System permissions catalog [AUTH: admin / roles:manage]
+/admin/settings/company  → Parish profile & receipt settings [AUTH: admin / company:manage]
 /umkm/performance/[id]   → Public vendor performance dashboard [PUBLIC: unauthenticated]
 ```
 
-**Route Guards (Nuxt middleware `auth.ts`):**
-```
-/login         → if authenticated → redirect to role-based home
-/pos           → if not authenticated → redirect to /login
-/admin/**      → if not authenticated → /login
-               → if authenticated but role !== 'admin' → /pos (not /login)
-```
+**Route Guards & Middleware Hierarchy:**
+- `app/middleware/auth.ts`:
+  - If not authenticated → redirect to `/login`.
+  - If `user.user_metadata.is_active === false` → force logout and redirect to `/login`.
+  - If `needsPasswordChange` (force password change flag set) and path !== `/change-password` → redirect to `/change-password`.
+  - Initializes active company via `companyStore.initialize()` if not already loaded.
+- `app/middleware/admin.ts`:
+  - If not authenticated → `/login`.
+  - Super admin bypass: `isSuperAdmin` or `role === 'admin'` granted direct access.
+  - Granular permission check: If `to.meta.permission` is defined, verifies `authStore.can(requiredPermission)` (redirects to `/pos` on failure).
+  - General administrative check: If no specific permission specified, verifies user possesses at least one administrative permission other than `pos:transact`.
+- `app/middleware/permission.ts`:
+  - Route-level middleware checking `to.meta.permission` against `authStore.can(permission)` (redirects unauthorized users to `/pos`).
 
 **Role-based home:**
-- `admin` → `/admin`
+- `admin` / `super_admin` → `/admin`
 - `cashier` → `/pos`
+
 
 ---
 
@@ -633,16 +645,26 @@ Mohon konfirmasi penerimaan. Terima kasih atas kerja samanya! 🙏
 ```typescript
 // stores/auth.ts
 interface AuthState {
-  user: User | null           // Supabase auth user object
-  role: 'admin' | 'cashier' | null
+  user: User | null                     // Supabase auth user object
+  role: 'admin' | 'cashier' | 'super_admin' | string | null
+  permissions: string[]                 // Effective system permissions catalog codes
   isLoading: boolean
+  passwordChangeCompleted: boolean
 }
+
+// Getters:
+// - isSuperAdmin: boolean              → role === 'super_admin' || permissions.includes('platform:manage')
+// - isAdmin: boolean                   → isSuperAdmin || role === 'admin'
+// - needsPasswordChange: boolean       → user_metadata.force_password_change === true
 
 // Actions:
 // - login(email, password)
 // - logout()
-// - refreshSession()
-// - getRole() → reads from user.user_metadata.role
+// - initializeRole()                   → resolves role from relational data / JWT
+// - fetchUserPermissions()             → queries effective permissions with 60s cache
+// - can(permissionCode: string)        → evaluates granular capability
+// - hasRole(roleCode: string)          → checks active role code
+// - markPasswordChangeCompleted()
 ```
 
 ### 8.2 `useSessionStore`
@@ -659,6 +681,7 @@ interface SessionState {
 // - fetchTodaySession()     → GET sessions WHERE session_date = today
 // - openSession()           → INSERT into sessions
 // - closeSession(adminId)   → call close_session RPC
+// - resetSession(adminId)   → call reset_session RPC (super admin / session:reset)
 // Getters:
 // - isOpen: boolean
 // - isClosed: boolean
@@ -721,7 +744,7 @@ interface CartState {
 // - decrementItem(productId)
 // - clearCart()
 // - updateStockWarning(productId, inStock: boolean)  → called from realtime handler
-// - checkout(nominalDiterima) → calls complete_transaction RPC
+// - checkout(nominalDiterima, paymentMethod)         → calls complete_transaction RPC
 ```
 
 ### 8.5 `useUmkmStore`
@@ -738,6 +761,93 @@ interface UmkmState {
 // - addUmkm(umkm)
 // - updateUmkm(id, updates)
 ```
+
+### 8.6 `useCompanyStore`
+
+```typescript
+// stores/company.ts
+interface CompanyState {
+  activeCompanyId: string | null
+  availableCompanies: UserCompanyMembership[]
+  activeCompanyDetail: Company | null
+  isLoading: boolean
+  error: string | null
+}
+
+// Getters:
+// - activeCompany: UserCompanyMembership | null
+// - currentRole: string
+// - hasMultipleCompanies: boolean
+// - isSuperAdminTenant: boolean
+
+// Actions:
+// - initialize()             → fetches accessible companies and restores active company from localStorage
+// - fetchMyCompanies()       → calls GET /api/companies/my-companies
+// - fetchActiveCompanyDetail() → calls GET /api/companies/active
+// - setActiveCompany(id)     → saves to localStorage ('omk_active_company_id') and refreshes stores
+// - switchCompany(id)        → switches active company and reloads session, products, and UMKM stores
+```
+
+### 8.7 `useCashFlowStore`
+
+```typescript
+// stores/cashFlow.ts
+interface CashFlowState {
+  summary: { total_income: number; total_expense: number; saldo: number }
+  items: CashFlowItem[]
+  totalCount: number
+  currentPage: number
+  pageSize: number
+  isLoading: boolean
+  error: string | null
+}
+
+// Getters:
+// - saldo, totalIncome, totalExpense, totalPages
+
+// Actions:
+// - fetchSummary(startDate, endDate)
+// - fetchList(page, pageSize, type, source, startDate, endDate)
+// - addCashFlow(type, amount, description, source, sessionId)
+```
+
+### 8.8 `usePaymentStore`
+
+```typescript
+// stores/payment.ts
+interface PaymentState {
+  summaries: UmkmPaymentSummary[]
+  history: UmkmPaymentHistory[]
+  isLoading: boolean
+  error: string | null
+}
+
+// Getters:
+// - totalTerutang: number
+
+// Actions:
+// - fetchSummary()           → calls get_umkm_payment_summary RPC
+// - fetchHistory()           → calls get_umkm_payment_history_all RPC
+// - markAsPaid(umkmId, amount, notes) → calls mark_umkm_as_paid RPC
+```
+
+### 8.9 `useHistoryStore`
+
+```typescript
+// stores/history.ts
+interface HistoryState {
+  historyList: any[]
+  productsCache: Record<string, any[]>
+  transactionsCache: Record<string, any[]>
+  isLoading: boolean
+  error: string | null
+}
+
+// Actions:
+// - fetchHistory(force?: boolean)
+// - clearCache()
+```
+
 
 ---
 
@@ -868,3 +978,87 @@ When back online:
 | Process transactions (Cashier) | ✅ Queued and synced on reconnect |
 | View product grid | ✅ Shows cached data from last fetch |
 | Cart management | ✅ Fully functional locally |
+
+---
+
+## 11. Flow 6: Multi-Tenant Parish Switching & Settings
+
+### 11.1 Parish Switching Flow (`CompanySwitcher.vue`)
+
+```
+User clicks Parish Switcher in sidebar or navbar
+     │
+     ▼
+Is user member of > 1 parish?
+     ├─ NO  → Switcher disabled / single badge displayed
+     └─ YES → Render dropdown list of available companies
+                   │
+                   User selects target company
+                   │
+                   ▼
+         companyStore.switchCompany(newCompanyId)
+                   │
+                   ├─ Update activeCompanyId ref
+                   ├─ Set localStorage('omk_active_company_id', newCompanyId)
+                   ├─ Update X-Company-Id headers in useApi and useSupabase
+                   ├─ Refresh sessionStore (fetch today session for new company)
+                   ├─ Refresh productStore (fetch session products for new company)
+                   └─ Refresh umkmStore (fetch partners catalog for new company)
+                   │
+                   ▼
+         Show success toast: "Beralih ke [Nama Paroki]"
+```
+
+### 11.2 Parish Profile & Receipt Configuration (`/admin/settings/company`)
+
+- **Route:** `/admin/settings/company`
+- **Permission:** `company:manage`
+- **Actions:**
+  - View and edit parish name, slug, phone contact, physical address, and logo URL.
+  - Configure receipt & financial metadata: `receipt_footer` (custom text printed at checkout), `qris_name` (display name for QRIS prompt), and `bank_info` (account transfer details).
+  - Submit updates via `PATCH /api/companies/active`.
+
+---
+
+## 12. Flow 7: Dynamic RBAC & User Permission Overrides
+
+### 12.1 Dynamic Roles Management (`/admin/roles`)
+
+- **Route:** `/admin/roles`
+- **Permission:** `roles:manage`
+- **Actions:**
+  - View registered roles with system protection badges (`is_system`).
+  - Create new custom roles (`name`, `code`, `description`) with module permission checkboxes.
+  - Edit existing roles and modify permission matrix.
+  - Delete non-system roles (system roles `admin`, `cashier`, `super_admin` are deletion-protected).
+
+### 12.2 User Permission Overrides (`/admin/users`)
+
+```
+Admin navigates to /admin/users
+     │
+     ▼
+Admin clicks "Atur Izin" on target user row
+     │
+     ▼
+Fetch User Permissions via GET /api/users/:id/permissions
+     │
+     ▼
+Modal renders all system permissions grouped by module:
+     - Inherited from Role (default badge)
+     - Explicit Grant (is_granted = true)
+     - Explicit Revoke (is_granted = false)
+     │
+     Admin toggles overrides per permission item
+     │
+     ▼
+Submit via PUT /api/users/:id/permissions
+     │
+     ├─ Persist to public.user_permissions (scoped to active company_id)
+     ├─ Invalidate server rbacCache for user
+     └─ Invalidate client permissions cache
+     │
+     ▼
+Show toast: "Hak akses pengguna berhasil diperbarui"
+```
+

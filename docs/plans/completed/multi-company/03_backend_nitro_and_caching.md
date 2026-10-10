@@ -2,9 +2,10 @@
 
 > **Fitur:** Multi-Company / Multi-Organisasi (Multi-Tenancy)  
 > **Fase:** 3 dari 4 (Backend Nitro Server, Multi-Tenant Context, In-Memory Caching, & API Endpoints)  
-> **Lokasi File Dokumen:** `docs/plans/proposed/multi-company/03_backend_nitro_and_caching.md`  
-> **Status Dokumen:** `PROPOSED / READY FOR REVIEW`  
+> **Lokasi File Dokumen:** `docs/plans/completed/multi-company/03_backend_nitro_and_caching.md`  
+> **Status Dokumen:** `COMPLETED & MERGED (LOCKED)` (PR #8)  
 > **Prasyarat:** Fase 1 (`01_database_and_data_migration.md`) & Fase 2 (`02_rpc_views_and_rls.md`) telah disetujui  
+
 > **Target Runtime:** Nuxt 4 Nitro Engine (Node.js Server) + TypeScript Strict Mode  
 
 ---

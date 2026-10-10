@@ -2,9 +2,10 @@
 
 > **Fitur:** Multi-Company / Multi-Organisasi (Multi-Tenancy)  
 > **Fase:** 1 dari 4 (Database Schema & Existing Data Migration)  
-> **Lokasi File Dokumen:** `docs/plans/proposed/multi-company/01_database_and_data_migration.md`  
-> **Status Dokumen:** `PROPOSED / READY FOR REVIEW`  
+> **Lokasi File Dokumen:** `docs/plans/completed/multi-company/01_database_and_data_migration.md`  
+> **Status Dokumen:** `COMPLETED & MERGED (LOCKED)` (PR #8)  
 > **Target Database:** Supabase (PostgreSQL 15+)  
+
 
 ---
 
