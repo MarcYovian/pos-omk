@@ -23,6 +23,7 @@ Gunakan panduan berikut untuk menemukan informasi yang Anda butuhkan secara inst
 | **Arsitektur Sistem & Rekayasa**<br>• Tech stack (Nuxt 4 SPA, Nitro, Supabase)<br>• Mesin PWA & Offline Queue (idb)<br>• Batasan tanggung jawab modul<br>• Strategi caching in-memory Nitro | 🏗️ [**`docs/ARCHITECTURE.md`**](./ARCHITECTURE.md) | **Arsitektur Teknis:** Struktur folder, siklus hidup data, penanganan zona waktu WIB (UTC+7), isolasi RLS multi-tenant, dan aturan penulisan kode. |
 | **Skema Database & Keamanan Data**<br>• 14 tabel PostgreSQL<br>• Kebijakan Row-Level Security (RLS)<br>• Database Views & Triggers<br>• Migrasi skema | 🗄️ [**`docs/DB_SCHEMA.md`**](./DB_SCHEMA.md) | **Database Reference:** Skema lengkap tabel PostgreSQL, definisi relasi, indeks performa, aturan RLS multi-paroki, dan trigger pencatatan buku kas. |
 | **Alur Pengguna & State Machine**<br>• Alur operasional kasir Minggu<br>• Alur rekonsiliasi pengurus OMK<br>• State diagram sesi (Draft, Open, Closed) | 🔄 [**`docs/USER_FLOWS.md`**](./USER_FLOWS.md) | **User Journey & State Flows:** Diagram alur interaksi pengguna, diagram transisi status sesi, dan urutan pemulihan antrean offline. |
+| **Pengujian UI & Dokumentasi QA**<br>• Alur 9 tahap QA bertahap<br>• Template & inventaris locator<br>• Skenario BDD & Test Cases<br>• Arsitektur automation Playwright | 🧪 [**`docs/qa/README.md`**](./qa/README.md) | **QA & UI Test Engineering Hub:** Standar dokumentasi bertahap (Feature brief, Pertanyaan/Asumsi, Skenario, Screen flow, Test data, Locator catalog, Test case, Automation architecture, dan Run report). |
 
 ---
 
@@ -38,6 +39,9 @@ docs/
 ├── ARCHITECTURE.md            # 🏗️ Panduan Arsitektur Teknis & Boundaries
 ├── DB_SCHEMA.md               # 🗄️ Skema Database PostgreSQL, RLS, Views & Triggers
 ├── USER_FLOWS.md              # 🔄 Diagram Alur Interaksi Pengguna & State Machine
+├── qa/                        # 🧪 QA Hub: Dokumen & Template Pengujian UI Bertahap
+│   ├── README.md              # Panduan Induk QA, Matriks 16 Fitur & Aturan Review Gates
+│   └── _template/             # Template Standar 9 Dokumen QA (00 s/d 08)
 │
 ├── plans/                     # 📦 [ARSIP HISTORIS] Dokumen perencanaan masa lalu (Tidak perlu dibaca)
 │   ├── completed/             # Arsip PRD v1 awal, rencana Multi-Company bertahap, dan rencana RBAC
