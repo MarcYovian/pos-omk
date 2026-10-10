@@ -1,46 +1,180 @@
-# AGENTS.md
+# AGENTS.md — Architecture Guide & Development Standards for OMK POS
 
-## Commands
+This document is the authoritative **Single Source of Truth** for AI Coding Agents and developers working on the **OMK POS** repository (`pos-omk`), structured in accordance with the [Linux Foundation Agentic AI specification (agents.md)](https://agents.md/).
+
+---
+
+## 1. Project Overview & Core Purpose
+
+**OMK POS** is a specialized Point of Sale (POS), Product Management, and UMKM Consignment platform operated by OMK (Catholic Youth Ministry) for weekly Sunday post-mass marketplaces.
+
+### Core Pillars
+1. **Point of Sale (POS) Cashier System (`/pos`):** Mobile-first Web/PWA cashier supporting multi-cashier concurrency, Cash and QRIS payments, instant change calculation, and an offline transaction queue for intermittent church internet.
+2. **Product Management:** Master product catalogs per UMKM, weekly active session catalogs (`session_products`), base cost vs retail pricing, and 3-session weighted stock recommendations.
+3. **UMKM Vendor Management:** Parish micro-enterprise partners, transparent sales performance monitoring via shareable WhatsApp dashboards, and debt settlement logging.
+4. **Consignment Model & Cash Flow:** Automated revenue split between UMKM base capital and OMK net profit, end-of-day physical stock reconciliation, and organizational cash flow ledger.
+
+---
+
+## 2. Setup & Dev Commands
 
 ```bash
-npm run dev       # Start dev server
-npm run build     # Production build
-npm test          # Run Vitest tests
-npm run typecheck # vue-tsc (has pre-existing errors in test files)
+npm run dev        # Start local development server (Nuxt 4 SPA)
+npm run build      # Production build (Nitro + PWA Service Worker)
+npm run preview    # Preview production build locally
+npm test           # Run Vitest test suite (unit & integration)
+npm run typecheck  # Type check with vue-tsc (pre-existing mock errors in some test files)
 ```
 
-## Tech Stack
+---
 
-- Nuxt 4 + Vue 3 + TypeScript (strict)
-- Supabase (Auth, PostgreSQL)
-- Pinia (state)
-- Tailwind CSS + @nuxt/icon
-- PWA via @vite-pwa/nuxt
-- Vitest for testing
+## 3. Testing & Verification Instructions
 
-## Project Structure
+- **Mandatory Test Verification:** Always run `npm test` after modifying code. All existing test suites must pass before marking a task as complete.
+- **Test File Location:**
+  - Client tests: `app/**/__tests__/*.test.ts`
+  - Nitro server tests: `server/**/__tests__/*.test.ts`
+- **Writing Tests:** When adding new utilities, composables, stores, or API endpoints, include corresponding Vitest tests using `@vue/test-utils` and Vitest mocks.
+- **Handling Failures:** If a test fails after your changes, inspect the failure, correct the implementation, and re-run `npm test` until green.
+
+---
+
+## 4. Locked Tech Stack & Design System
+
+### 4.1 Tech Stack
+| Layer | Technology | Version | Description / Constraints |
+|---|---|---|---|
+| **Language** | TypeScript | `^5.4.5` | Strict mode enabled (`strict: true`). `any` type is **strictly forbidden**. |
+| **Framework** | Nuxt 4 | `^4.4.8` | SPA mode (`ssr: false`), Nitro engine for server routes. |
+| **UI Runtime** | Vue 3 | `^3.4.31` | Composition API exclusively with `<script setup lang="ts">`. |
+| **State** | Pinia | `^3.0.4` | In-memory reactive state (Cart, Auth, Session, Products, UMKM, Cash Flow, Payments). |
+| **Backend & DB** | Supabase | `^2.107.0` | PostgreSQL, Auth, Row-Level Security (RLS), Realtime PubSub, Stored Procedures (RPC). |
+| **PWA & Offline**| @vite-pwa/nuxt + idb | `^1.1.1` / `^8.0.1` | Workbox Service Worker + IndexedDB queue for offline transactions. |
+| **Styling** | Tailwind CSS | `^3.4.x` | Utility-first CSS via `@nuxtjs/tailwindcss`. |
+| **Iconography** | @nuxt/icon | `^1.1.0` | SVG icons via Iconify (Heroicons collection). |
+| **Charts** | Chart.js + vue-chartjs | `^4.5.1` / `^5.3.3` | Weekly sales trends, UMKM profit contribution, top products. |
+
+> [!CAUTION]
+> Installing third-party UI component libraries (PrimeVue, Vuetify, DaisyUI, etc.) or Axios is **STRICTLY PROHIBITED**. Use Tailwind CSS and native `fetch` / `useSupabase()`.
+
+### 4.2 Design System & Cashier UI Specifications
+- **Brand Palette:** Primary Dark Navy `#1e3a5f` (`brand-900`), `brand-50` through `brand-700`.
+- **Semantic Colors:** `success` (`#16a34a`), `warning` (`#d97706`), `danger` (`#dc2626`).
+- **POS Typography:** Monospaced font (`JetBrains Mono`, `Geist Mono`) for prices and change amounts. Preset classes: `text-pos-price` (1.5rem bold) & `text-pos-change` (2rem extra-bold).
+- **Touch Ergonomics:** Minimum tap target of **48×48px** (`min-h-touch`, `min-w-touch`) for all buttons, numpad keys, and product cards.
+- **Custom Primitive Components (`app/components/ui/`):** `AppButton`, `AppInput` (with password toggle), `AppModal`, `AppToast`, `OfflineBanner`, `ProfileDropdown`, `CompanySwitcher`.
+
+---
+
+## 5. Folder Structure & Architectural Boundaries
 
 ```
-app/
-├── pages/       # Routes (file-based)
-├── components/ # Reusable UI
-├── composables/ # Vue composables
-├── stores/      # Pinia stores
-├── types/       # TypeScript types
-└── utils/       # Helpers
+pos-omk/
+├── app/                              # Nuxt 4 Client Source (Frontend UI & Logic)
+│   ├── app.vue                       # Root component (VitePwaManifest, layout wrapper)
+│   ├── assets/css/main.css           # Global stylesheet & Tailwind directives
+│   ├── components/ui/                # Atomic UI primitive components (Button, Input, Modal, Toast)
+│   ├── composables/                  # Stateful logic & browser APIs (useNetworkStatus, useOfflineQueue, useSessionDate, useSupabase)
+│   ├── layouts/admin.vue             # Admin layout: grouped navigation sidebar & session status indicator
+│   ├── middleware/                   # Route guards: auth.ts (login guard), admin.ts (admin role guard), permission.ts
+│   ├── pages/                        # File-based routes (/pos, /admin/*, /umkm/performance/*, /login)
+│   ├── stores/                       # Pinia stores (auth, cart, session, products, umkm, history, cashFlow, payment)
+│   ├── types/                        # Client TypeScript definitions (app.ts, database.types.ts, pos.ts)
+│   └── utils/                        # Pure stateless helper functions (currency.ts, date.ts, report.ts)
+├── server/                           # Nitro backend server
+│   ├── api/users/                    # REST endpoints for user management via Supabase Service Role
+│   └── utils/                        # Server helpers (requireAdmin.ts, password.ts, rbacCache.ts)
+├── shared/types/                     # Shared TypeScript contracts between client and Nitro server
+├── public/                           # Static public assets (PWA icons, manifest, favicon)
+└── docs/                             # Ground-truth documentation & plans (FEATURES, ARCHITECTURE, DB_SCHEMA, USER_FLOWS)
 ```
 
-## Tailwind Custom Colors
+### Architectural Responsibility Boundaries
+- `app/components/ui/`: Pure visual presentation components only. Accepts `props` and emits events. Never call Pinia stores or Supabase directly.
+- `app/stores/`: Hosts client-side business logic, Supabase RPC calls, and shared reactive state.
+- `app/utils/`: Pure stateless functions without reactive Vue dependencies.
+- `server/api/`: Strictly for administrative operations requiring `SUPABASE_SECRET_KEY` (service role). Never leak service role key to the client.
 
-`brand` palette available: `brand-50`, `brand-100`, `brand-500`, `brand-600`, `brand-700`, `brand-900`. Primary: navy `#1e3a5f`.
+---
 
-## Database
+## 6. Code Style & Conventions
 
-Use Supabase MCP tools (`supabase_*`) for migrations and queries. Supabase URL/key in `.env`.
+- **Composition API Mandatory:** Always use `<script setup lang="ts">`. Options API is forbidden.
+- **Strict Typing:** Never use `any`. Always use typed schemas from `database.types.ts` or `app.ts`.
+- **Western Indonesia Time (WIB / UTC+7):** Never use `new Date().toISOString()`. Always use `getTodayJakarta()` from `app/utils/date.ts` to prevent session dates from rolling over due to UTC timezone offsets.
+- **Currency Format:** Always store IDR amounts as pure integers and display them via `formatRupiah()` (no decimals/cents).
+- **In-Memory State:** Shopping cart must live exclusively in Pinia memory (never `localStorage`). Offline queue lives in IndexedDB (`idb`).
+- **Supabase Instantiation:** In client code, always use auto-imported `useSupabase()` / `useSupabaseClient<Database>()`. Never instantiate manual `createClient()` on the frontend.
+- **Responsive Tables:** Mobile-first design; use `block sm:hidden` card pattern for responsive tables.
+- **Auto-Imports:** Composables and stores are auto-imported from `~/composables` and `~/stores`.
 
-## Key Conventions
+---
 
-- All composables auto-imported from `~/composables`
-- Stores auto-imported from `~/stores`
-- Components use `<script setup>` + TypeScript
-- Mobile-first: use `block sm:hidden` pattern for responsive tables
+## 7. Consignment Financial Rules (Single Source of Truth)
+
+- `harga_asli`: Base cost from UMKM (100% remitted for units sold). Cashiers are **STRICTLY FORBIDDEN** from viewing this value.
+- `harga_jual`: Retail selling price to parish buyers (`harga_asli + OMK markup`).
+- `OMK Net Profit`: Computed as `(harga_jual - harga_asli) × units_sold`.
+- `Unsold Stock`: Physically returned to the UMKM partner at session close without cost to OMK.
+
+---
+
+## 8. Security & Forbidden Patterns (Do NOT)
+
+- **Underspecified Prompts:** If an instruction or prompt is ambiguous, ALWAYS ask for clarification before modifying code.
+- **Locked Features:** Never modify or refactor completed/locked features (F-01 to F-14) without explicit written instruction.
+- **Cashier Pricing Isolation:** Never expose `harga_asli` to cashier context — cashiers must only query safe view `products_cashier_view`.
+- **Atomic Stock Mutation:** Never mutate stock or insert transactions directly from client — always use atomic database RPC `complete_transaction`.
+- **Client Supabase Client:** Never initialize Supabase client manually with `createClient()` in frontend — always use auto-imported `useSupabase()`.
+- **Secret Key Protection:** Never expose `SUPABASE_SECRET_KEY` (service role) to client code — strictly for Nitro server (`server/`) and administrative scripts.
+- **Storage Isolation:** Never use `localStorage` for cart or session — cart is in-memory Pinia store, offline queue is in IndexedDB (`idb`).
+- **Type Safety:** Never use `any` type in TypeScript.
+- **Timezone Safety:** Never use UTC time or `new Date().toISOString()` for session date — always use `getTodayJakarta()`.
+- **Financial Calculations:** Never calculate official session financial totals on frontend — always use database RPC `get_session_financial_summary`.
+- **Soft Deletion:** Never hard-delete UMKM partners with transaction history — always soft-deactivate via `is_active = false`.
+- **Dependency Ban:** Never install third-party UI component libraries (PrimeVue, Vuetify, DaisyUI) or Axios.
+- **Git Branching:** Never work directly on `master` branch — always create a new branch (`feat/*`, `fix/*`, `docs/*`).
+- **Secrets in Git:** Never commit `.env` or any file containing secret keys to Git.
+
+---
+
+## 9. Completed & Locked Features Reference
+
+The following 14 features are fully implemented, tested, and marked as **LOCKED** (see [docs/FEATURES.md](./docs/FEATURES.md) for full technical specifications):
+1. **Auth & RBAC:** Login, role guards, self-service password change, password reset.
+2. **Real-time POS Cashier Screen (`/pos`):** Active products grid, search & filter, cart, numpad, change calculation, Cash & QRIS payment, atomic RPC checkout, realtime stock sync.
+3. **PWA & Offline Queue:** Workbox service worker, IndexedDB queue, auto-sync on reconnect, network status banner.
+4. **UMKM Master Data (`/admin/umkm`):** Vendor partner CRUD, master product catalog, soft-deactivation.
+5. **Weekly Session Setup (`/admin/setup`):** Sunday session management, `session_products`, pricing, 3-session stock recommendations.
+6. **Financial Session Dashboard (`/admin/dashboard`):** Gross revenue, UMKM remittance, OMK profit, accordion breakdown, Reopen & Reset controls.
+7. **End-of-Day Stock Reconciliation (`/admin/reconciliation`):** Physical count input, discrepancy detection (`selisih`), session closure.
+8. **WhatsApp Report Generator (`/admin/reports`):** Vendor report text formatting, 1-click clipboard copy, historical session reporting.
+9. **Session History & Transaction Log (`/admin/history`):** Past session logs, product details modal, cashier receipt basket logs.
+10. **Sales Analytics (`/admin/analytics`):** Weekly sales trend, UMKM profit doughnut chart, top products bar chart.
+11. **Cash Flow Ledger (`/admin/cash-flow`):** Automated cashier income entries, manual income/expense, running balance.
+12. **UMKM Settlements & Payments (`/admin/payments`):** Remittance tracking, payment entry, automated cash flow ledger expense trigger.
+13. **Public UMKM Performance Dashboard (`/umkm/performance/[id]`):** Auth-free transparent sales dashboard shareable via WhatsApp.
+14. **User Management (`/admin/users`):** Cashier account provisioning, temp passwords, status toggle, password reset links.
+
+---
+
+## 10. Git Rules & Workflow
+
+1. **New Branch Required:** Before creating a new feature (`feat`), fixing a bug (`fix`), or updating documentation (`docs`), **ALWAYS create a new branch** from the base branch (e.g., `git checkout -b feat/feature-name` or `docs/doc-update`). Never commit directly to `master`.
+2. **Verification Gate:** Ensure `npm test` and `npm run build` pass without errors.
+3. **Commit & Push:** Commit using Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`) and push to remote (`git push -u origin <branch-name>`).
+
+---
+
+## 11. Deep Documentation Map (Progressive Disclosure)
+
+For detailed specifications, inspect the dedicated documents in `docs/`:
+
+| Document | Purpose & Contents |
+|---|---|
+| [**`docs/FEATURES.md`**](./docs/FEATURES.md) | Technical specs and workflows of the 14 LOCKED features. |
+| [**`docs/ARCHITECTURE.md`**](./docs/ARCHITECTURE.md) | Full architectural layout, layer boundaries, and design system specs. |
+| [**`docs/DB_SCHEMA.md`**](./docs/DB_SCHEMA.md) | Database schema, RPC functions, triggers, views, and RLS policies. |
+| [**`docs/USER_FLOWS.md`**](./docs/USER_FLOWS.md) | Complete user journey and state flows for cashier & admin. |
+| [**`docs/plans/completed/PRD_v1_MVP.md`**](./docs/plans/completed/PRD_v1_MVP.md) | Historical MVP v1.0 PRD and business domain foundation. |
+| [**`docs/plans/proposed/`**](./docs/plans/proposed/) | Future feature proposals and architectural drafts. |

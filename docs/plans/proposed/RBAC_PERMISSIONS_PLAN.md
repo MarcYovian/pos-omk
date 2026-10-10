@@ -23,7 +23,7 @@
 4. **Zero Downtime & Backward Compatibility:** Existing cashier and admin accounts must not experience session interruptions, login errors, or permission lockouts during schema rollout.
 
 ### 1.3 Governance & Compliance with Locked Features
-Per [GEMINI.md Bagian 7 & 8](file:///home/rodex/Documents/cell/projects/pos-omk/GEMINI.md) and [docs/FEATURES.md](file:///home/rodex/Documents/cell/projects/pos-omk/docs/FEATURES.md), features **F-01 (Auth & RBAC)** and **F-14 (User Management)** are marked as **`LOCKED`**. This plan is formulated as an **authorized supervised extension**:
+Per [AGENTS.md Bagian 8 & 9](file:///home/rodex/Documents/cell/projects/pos-omk/AGENTS.md) and [docs/FEATURES.md](file:///home/rodex/Documents/cell/projects/pos-omk/docs/FEATURES.md), features **F-01 (Auth & RBAC)** and **F-14 (User Management)** are marked as **`LOCKED`**. This plan is formulated as an **authorized supervised extension**:
 - **Consignment Cost Isolation (`harga_asli`):** Cashier accounts remain **strictly forbidden** from querying `harga_asli`. Cashiers only access `products_cashier_view` with RLS enforcement.
 - **Atomic Checkout Preserved:** Checkout logic remains strictly encapsulated in the atomic database RPC `complete_transaction`.
 - **Superuser Fallback:** Any user with `user_metadata->>'role' = 'admin'` automatically bypasses permission checks as a superadmin, ensuring legacy admin sessions remain 100% operational.
@@ -354,7 +354,7 @@ pos-omk/
 
 ## 6. Roadmap Eksekusi & Protokol Git
 
-Sesuai [GEMINI.md Bagian 10](file:///home/rodex/Documents/cell/projects/pos-omk/GEMINI.md#L159-L167), pelaksanaan plan ini wajib mematuhi aturan:
+Sesuai [AGENTS.md Bagian 10](file:///home/rodex/Documents/cell/projects/pos-omk/AGENTS.md), pelaksanaan plan ini wajib mematuhi aturan:
 1. **Branch Terpisah:** Wajib membuat branch baru dari `master` (misal: `feat/rbac-dynamic-permissions`). Dilarang bekerja atau push langsung ke `master`.
 2. **Conventional Commits:** Menggunakan format commit baku (`feat(rbac): ...`, `test(rbac): ...`, `docs(rbac): ...`).
 3. **Verifikasi Wajib:** Wajib lolos `npm test` dan `npm run build` sebelum push ke remote origin.
