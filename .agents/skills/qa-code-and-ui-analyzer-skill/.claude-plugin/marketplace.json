@@ -1,0 +1,7 @@
+{
+  "name": "qa-code-and-ui-analyzer-skill",
+  "version": "1.0.0",
+  "description": "Codebase and UI feature intelligence extractor for QA documentation and automation.",
+  "category": "testing",
+  "tags": ["qa", "testing", "vue", "playwright", "reverse-engineering"]
+}

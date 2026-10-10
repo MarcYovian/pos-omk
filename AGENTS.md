@@ -218,20 +218,20 @@ For detailed specifications, inspect the dedicated documents in `docs/`:
 
 ## 13. AI Agent Skills Registry & QA Automation Tooling
 
-This repository is supported by a standardized suite of [Open Agent Skills (SKILL.md)](https://agents.md/) installed globally (`~/.gemini/config/skills/` and symlinked to `~/.agents/skills/`) to empower AI agents and developers across development, testing, and governance:
+This repository is supported by a standardized suite of [Open Agent Skills (SKILL.md)](https://agents.md/) organized into project-scoped workspace skills (`.agents/skills/`) and global governance skills (`~/.gemini/config/skills/`):
 
-### 13.1. QA Documentation & UI Automation Suite (`qa-doc-suite`)
-A 9-stage progressive UI testing pipeline integrated with **Playwright MCP** and triangulated against ground-truth documentation ([`docs/PRD.md`](./docs/PRD.md), [`docs/USER_FLOWS.md`](./docs/USER_FLOWS.md), [`docs/UI_UX_SPECIFICATION.md`](./docs/UI_UX_SPECIFICATION.md)) and the Vue 3 / Pinia codebase:
+### 13.1. Project-Scoped QA Documentation & UI Automation Suite (`.agents/skills/`)
+A project-scoped 9-stage progressive UI testing pipeline stored directly in `.agents/skills/`, integrated with **Playwright MCP** and triangulated against ground-truth documentation ([`docs/PRD.md`](./docs/PRD.md), [`docs/USER_FLOWS.md`](./docs/USER_FLOWS.md), [`docs/UI_UX_SPECIFICATION.md`](./docs/UI_UX_SPECIFICATION.md)) and the Vue 3 / Pinia codebase:
 
-| Skill Name | Trigger Command | Description & Role |
-|---|---|---|
-| **`qa-doc-suite`** | `/qa-doc-suite [feature]`<br>`/qa-suite [feature]` | **Master Orchestrator & Gatekeeper:** Coordinates the complete 9-document pipeline per feature, enforces progressive approval gates (*Review Gates 1–3, 4–6, 7–9*), and runs automated compliance audits (`python3 scripts/audit_docs.py`). |
-| **`qa-code-and-ui-analyzer-skill`** | `/qa-analyze [feature]` | **Discovery Engine:** Dissects PRD user stories, user flows, Vue SFC templates, Pinia stores, Supabase RPCs, and live DOM / accessibility trees via Playwright MCP (`browser_snapshot`, `browser_evaluate`). Emits `feature-analysis.json`. |
-| **`qa-spec-and-scenario-skill`** | `/qa-spec-plan [feature]` | **Scenario Planner:** Generates Stage 1, 2, and 3 documents (`00-feature-brief.md`, `01-questions-assumptions.md`, `02-test-scenarios.md`) in BDD *Given-When-Then* format directly from PRD Acceptance Criteria. |
-| **`qa-ui-cataloger-skill`** | `/qa-ui-catalog [feature]` | **UI & Locator Cataloger:** Generates Stage 4, 5, and 6 documents (`03-screen-flow.md`, `04-test-data-spec.md`, `05-element-catalog.md`). Applies *Dual-Strategy Locators* (Resilient Semantic Fallbacks + Developer `data-testid` patch recommendations). |
-| **`qa-test-case-and-runner-skill`** | `/qa-test-run [feature]` | **Test Architect & Runner:** Generates Stage 7, 8, and 9 documents (`06-test-cases.md`, `07-automation-architecture.md`, `reports/YYYY-MM-DD-run-01.md`). Supports interactive live browser test execution and screenshot recording via Playwright MCP. |
+| Skill Name | Path in Repo | Trigger Command | Description & Role |
+|---|---|---|---|
+| **`qa-doc-suite`** | `.agents/skills/qa-doc-suite` | `/qa-doc-suite [feature]`<br>`/qa-suite [feature]` | **Master Orchestrator & Gatekeeper:** Coordinates the complete 9-document pipeline per feature, enforces progressive approval gates (*Review Gates 1–3, 4–6, 7–9*), and runs automated compliance audits (`python3 scripts/audit_docs.py`). |
+| **`qa-code-and-ui-analyzer-skill`** | `.agents/skills/qa-code-and-ui-analyzer-skill` | `/qa-analyze [feature]` | **Discovery Engine:** Dissects PRD user stories, user flows, Vue SFC templates, Pinia stores, Supabase RPCs, and live DOM / accessibility trees via Playwright MCP (`browser_snapshot`, `browser_evaluate`). Emits `feature-analysis.json`. |
+| **`qa-spec-and-scenario-skill`** | `.agents/skills/qa-spec-and-scenario-skill` | `/qa-spec-plan [feature]` | **Scenario Planner:** Generates Stage 1, 2, and 3 documents (`00-feature-brief.md`, `01-questions-assumptions.md`, `02-test-scenarios.md`) in BDD *Given-When-Then* format directly from PRD Acceptance Criteria. |
+| **`qa-ui-cataloger-skill`** | `.agents/skills/qa-ui-cataloger-skill` | `/qa-ui-catalog [feature]` | **UI & Locator Cataloger:** Generates Stage 4, 5, and 6 documents (`03-screen-flow.md`, `04-test-data-spec.md`, `05-element-catalog.md`). Applies *Dual-Strategy Locators* (Resilient Semantic Fallbacks + Developer `data-testid` patch recommendations). |
+| **`qa-test-case-and-runner-skill`** | `.agents/skills/qa-test-case-and-runner-skill` | `/qa-test-run [feature]` | **Test Architect & Runner:** Generates Stage 7, 8, and 9 documents (`06-test-cases.md`, `07-automation-architecture.md`, `reports/YYYY-MM-DD-run-01.md`). Supports interactive live browser test execution and screenshot recording via Playwright MCP. |
 
-### 13.2. Knowledge Management & Project Governance Skills
+### 13.2. Global Governance & Knowledge Management Skills (`~/.gemini/config/skills/`)
 | Skill Name | Trigger Command | Description & Role |
 |---|---|---|
 | **`obsidian-session-logger-skill`** | `/log-session`<br>`log this session` | Logs engineering pair-programming history into Obsidian daily notes (`0X_POS_OMK_<Topic>.md`) tagged with `#project/pos-omk`. |

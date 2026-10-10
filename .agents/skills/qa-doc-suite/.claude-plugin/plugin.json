@@ -1,0 +1,8 @@
+{
+  "name": "qa-doc-suite",
+  "version": "1.0.0",
+  "description": "Master orchestrator for the 9-stage QA documentation and Playwright automation pipeline.",
+  "author": {
+    "name": "Senior QA Automation Team"
+  }
+}

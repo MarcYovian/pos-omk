@@ -1,0 +1,8 @@
+{
+  "name": "qa-code-and-ui-analyzer-skill",
+  "version": "1.0.0",
+  "description": "Extracts comprehensive feature intelligence from PRD User Stories, User Flows, Vue 3 SFC templates, Pinia stores, Nitro APIs, and Supabase RPCs, combined with live browser DOM discovery via Playwright MCP.",
+  "author": {
+    "name": "Senior QA Automation Team"
+  }
+}

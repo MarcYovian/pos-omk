@@ -1,0 +1,7 @@
+{
+  "name": "qa-ui-cataloger-skill",
+  "version": "1.0.0",
+  "description": "Generator for QA screen flow, data specs, and locator catalog with resilient fallback and developer action items.",
+  "category": "testing",
+  "tags": ["qa", "testing", "locators", "screen-flow", "test-data"]
+}

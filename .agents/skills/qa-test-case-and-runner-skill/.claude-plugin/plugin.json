@@ -1,0 +1,8 @@
+{
+  "name": "qa-test-case-and-runner-skill",
+  "version": "1.0.0",
+  "description": "Generator for detailed test cases, Playwright POM architecture, and interactive live execution reports.",
+  "author": {
+    "name": "Senior QA Automation Team"
+  }
+}
