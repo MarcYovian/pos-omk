@@ -182,21 +182,26 @@ For detailed specifications, inspect the dedicated documents in `docs/`:
 
 ---
 
-## 12. Obsidian Protocol (Second Brain)
+## 12. Obsidian Protocol (Second Brain & Multi-Project Governance)
 
 - **Vault Location:** `/home/rodex/Documents/cell/obsidian/Workspace` · CLI: `obsidian-wiki` (vault globally configured).
-- **Vault Topology:**
-  - `journal/YYYY-MM-DD/` — Session logs (`0X_<Topic>.md`) and daily rollups (`00_Daily_Summary.md`).
-  - `references/{gateway,backend,notes,QA_Cheatsheets}/` — SSOT docs (`doc-ota`), local guides, and QA cheatsheets.
-  - `projects/` & `_meta/` — Project tracking, memory tables, profiles, and pending todos.
-  - `concepts/` & `entities/` — Atomic technical concepts, data models, and vendor entities.
+- **Multi-Project Vault Notice:** The vault is a shared second brain hosting both office workspaces (*Orbis Daya Asia*) and personal/community projects. When working on **OMK POS**, always isolate context to avoid cross-project hallucination.
+- **Vault Topology & Targets for OMK POS:**
+  - `projects/POS OMK.md` — Central project hub note for OMK POS (use as `--origin` for handoffs).
+  - `journal/YYYY-MM-DD/` — Session logs with format `0X_POS_OMK_<Topic>.md` and daily rollups (`00_Daily_Summary.md`).
+  - `references/notes/` — Technical architecture guides, domain specs, and cheatsheets.
+  - `concepts/` & `entities/` — Atomic consignment models, Supabase RBAC concepts, and financial schemas.
 - **Session Lifecycle:**
-  - *Start:* (When user says "recap", "continue", or starts a fresh session): run `obsidian-wiki memory recap` and `obsidian-wiki memory todo list`. Check drift: `obsidian-wiki projects-check --pretty /home/rodex/Documents/cell/obsidian/Workspace`.
-  - *During Work:* Query via `obsidian-wiki query "<topic>"` or `obsidian-wiki context-pack "<topic>" --budget 2000`. Use Obsidian MCP tools (`obsidian_get_file_contents`, `obsidian_search_by_tag`) for direct note reads.
-  - *Carry-over / Handoff:* Add pending thread via `obsidian-wiki memory todo add "<task>" --origin "<page>"`; mark resolved via `obsidian-wiki memory todo done <id>`.
+  - *Start:* (When user says "recap", "continue", or starts a fresh session):
+    1. Run `obsidian-wiki memory recap` (Note: ignore office threads unrelated to OMK POS) and `obsidian-wiki memory todo list`.
+    2. Optional drift check: `obsidian-wiki projects-check --pretty /home/rodex/Documents/cell/obsidian/Workspace` (Exit code 2 is expected if other repos have drifted; do not treat as fatal error).
+  - *During Work:* Query via `obsidian-wiki query "pos-omk <topic>"` or `obsidian-wiki context-pack "<topic>" --budget 2000`. Direct note reads via Obsidian MCP tools (`obsidian_get_file_contents`, `obsidian_search_by_tag`).
+  - *Carry-over / Handoff:* Add pending thread via:
+    `obsidian-wiki memory todo add "<task>" --origin "projects/POS OMK.md"`
+    Mark resolved via `obsidian-wiki memory todo done <id>`.
 - **Knowledge Ingestion & Logging Criteria:**
-  - *Auto/Instructed:* Run skill `obsidian-session-logger-skill` when user explicitly commands ("log this session", "catat ke obsidian").
-  - *Proactive Offer ("Record to Obsidian?"):* Only for critical bug Root Cause Analysis (RCA), discovered vendor quirks (undocumented API behaviors), and architectural decisions (ADRs).
-  - *Noise Filter:* NEVER record trivial typos, temporary shell snippets, or standard test runs.
-  - *Atomic Notes:* Use skill `obsidian-pkm-manager-skill` for new technical guides or cheatsheets.
-- **Post-Write Rule:** Always run `obsidian-wiki memory sync` after creating or editing vault notes to update `index.md` and `hot.md`.
+  - *Auto/Instructed:* Run skill `obsidian-session-logger-skill` when user explicitly commands ("log this session", "catat ke obsidian"). Ensure session note is prefixed with `0X_POS_OMK_` and tagged with `#project/pos-omk`.
+  - *Proactive Offer ("Record to Obsidian?"):* Only for critical bug RCA, Supabase RPC quirks, consignment calculation edge cases, or architectural decisions (ADRs).
+  - *Noise & Secret Filter:* NEVER record trivial typos, temporary shell runs, secret keys (`SUPABASE_SECRET_KEY`), or unmasked vendor personal data.
+  - *Atomic Notes:* Use skill `obsidian-pkm-manager-skill` for new technical guides; always include YAML frontmatter and bi-directional wikilinks (`[[projects/POS OMK|POS OMK]]`).
+- **Post-Write Rule:** Always run `obsidian-wiki memory sync` after creating or editing vault notes to update `index.md` and `hot.md`. (Run `obsidian-wiki sync` if pushing vault git commits is required).
