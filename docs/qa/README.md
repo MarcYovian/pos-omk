@@ -80,24 +80,24 @@ pos-omk/
 
 ## 4. Matriks Direktori Fitur (F-01 s/d F-16)
 
-| Kode Fitur | Nama Direktori QA | Rute Halaman | Komponen / Endpoint Terkait |
-|:---:|---|---|---|
-| **F-01** | `docs/qa/f01-auth-rbac/` | `/login`, `/change-password`, `/reset-password` | Supabase Auth, middleware `auth.ts`, `admin.ts` |
-| **F-02** | `docs/qa/f02-pos-cashier/` | `/pos` | `useCartStore`, RPC `complete_transaction` |
-| **F-03** | `docs/qa/f03-pwa-offline/` | `/pos` (Offline Context) | `useOfflineQueue.ts`, `OfflineBanner.vue`, `idb` |
-| **F-04** | `docs/qa/f04-umkm-master/` | `/admin/umkm`, `/admin/umkm/[umkm_id]` | `useUmkmStore`, tabel `umkm`, `master_products` |
-| **F-05** | `docs/qa/f05-session-setup/` | `/admin/setup`, `/admin/setup/[umkm_id]` | `useSessionStore`, RPC `get_product_stock_recommendation` |
-| **F-06** | `docs/qa/f06-financial-dashboard/` | `/admin/dashboard` | RPC `get_session_financial_summary`, `reopen_session` |
-| **F-07** | `docs/qa/f07-stock-reconciliation/`| `/admin/reconciliation` | RPC `close_session`, tabel `reconciliation` |
-| **F-08** | `docs/qa/f08-whatsapp-reports/` | `/admin/reports` | `app/utils/report.ts`, format WA clipboard |
-| **F-09** | `docs/qa/f09-session-history/` | `/admin/history` | `useHistoryStore`, view `session_history_summary` |
-| **F-10** | `docs/qa/f10-sales-analytics/` | `/admin/analytics` | `chart.js`, RPC `get_weekly_trends`, view doughnut |
-| **F-11** | `docs/qa/f11-cash-flow/` | `/admin/cash-flow` | `useCashFlowStore`, RPC `add_cash_flow` |
-| **F-12** | `docs/qa/f12-umkm-settlements/` | `/admin/payments` | `usePaymentStore`, RPC `mark_umkm_as_paid` |
-| **F-13** | `docs/qa/f13-public-umkm-portal/` | `/umkm/performance/[umkm_id]` | `server/api/public/umkm-performance/*` |
-| **F-14** | `docs/qa/f14-user-management/` | `/admin/users` | `server/api/users/*`, modal granular permissions |
-| **F-15** | `docs/qa/f15-multi-parish-tenancy/`| `/admin/settings/company` | `CompanySwitcher.vue`, `X-Company-Id` header |
-| **F-16** | `docs/qa/f16-roles-permissions/` | `/admin/roles`, `/admin/permissions` | `server/api/roles/*`, in-memory cache `rbacCache.ts` |
+| Kode Fitur | Nama Direktori QA | Rute Halaman | Status Dokumen | Komponen / Endpoint Terkait |
+|:---:|---|---|:---:|---|
+| **F-01** | [`docs/qa/f01-auth-rbac/`](./f01-auth-rbac/) | `/login`, `/change-password`, `/reset-password` | ✅ **9/9 Complete** | Supabase Auth, middleware `auth.ts`, `admin.ts` |
+| **F-02** | [`docs/qa/f02-pos-cashier/`](./f02-pos-cashier/) | `/pos` | ✅ **9/9 Complete** | `useCartStore`, RPC `complete_transaction` |
+| **F-03** | `docs/qa/f03-pwa-offline/` | `/pos` (Offline Context) | ⏳ Ready | `useOfflineQueue.ts`, `OfflineBanner.vue`, `idb` |
+| **F-04** | `docs/qa/f04-umkm-master/` | `/admin/umkm`, `/admin/umkm/[umkm_id]` | ⏳ Ready | `useUmkmStore`, tabel `umkm`, `master_products` |
+| **F-05** | `docs/qa/f05-session-setup/` | `/admin/setup`, `/admin/setup/[umkm_id]` | ⏳ Ready | `useSessionStore`, RPC `get_product_stock_recommendation` |
+| **F-06** | `docs/qa/f06-financial-dashboard/` | `/admin/dashboard` | ⏳ Ready | RPC `get_session_financial_summary`, `reopen_session` |
+| **F-07** | `docs/qa/f07-stock-reconciliation/`| `/admin/reconciliation` | ⏳ Ready | RPC `close_session`, tabel `reconciliation` |
+| **F-08** | `docs/qa/f08-whatsapp-reports/` | `/admin/reports` | ⏳ Ready | `app/utils/report.ts`, format WA clipboard |
+| **F-09** | `docs/qa/f09-session-history/` | `/admin/history` | ⏳ Ready | `useHistoryStore`, view `session_history_summary` |
+| **F-10** | `docs/qa/f10-sales-analytics/` | `/admin/analytics` | ⏳ Ready | `chart.js`, RPC `get_weekly_trends`, view doughnut |
+| **F-11** | `docs/qa/f11-cash-flow/` | `/admin/cash-flow` | ⏳ Ready | `useCashFlowStore`, RPC `add_cash_flow` |
+| **F-12** | `docs/qa/f12-umkm-settlements/` | `/admin/payments` | ⏳ Ready | `usePaymentStore`, RPC `mark_umkm_as_paid` |
+| **F-13** | `docs/qa/f13-public-umkm-portal/` | `/umkm/performance/[umkm_id]` | ⏳ Ready | `server/api/public/umkm-performance/*` |
+| **F-14** | `docs/qa/f14-user-management/` | `/admin/users` | ⏳ Ready | `server/api/users/*`, modal granular permissions |
+| **F-15** | `docs/qa/f15-multi-parish-tenancy/`| `/admin/settings/company` | ⏳ Ready | `CompanySwitcher.vue`, `X-Company-Id` header |
+| **F-16** | `docs/qa/f16-roles-permissions/` | `/admin/roles`, `/admin/permissions` | ⏳ Ready | `server/api/roles/*`, in-memory cache `rbacCache.ts` |
 
 ---
 
