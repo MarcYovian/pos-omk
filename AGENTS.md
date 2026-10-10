@@ -218,22 +218,22 @@ For detailed specifications, inspect the dedicated documents in `docs/`:
 
 ## 13. AI Agent Skills Registry & QA Automation Tooling
 
-Repository ini didukung oleh rangkaian skill standar [Open Agent Skills (SKILL.md)](https://agents.md/) yang diinstal secara global (`~/.gemini/config/skills/` dan linked ke `~/.agents/skills/`) untuk memandu agen AI dan pengembang:
+This repository is supported by a standardized suite of [Open Agent Skills (SKILL.md)](https://agents.md/) installed globally (`~/.gemini/config/skills/` and symlinked to `~/.agents/skills/`) to empower AI agents and developers across development, testing, and governance:
 
 ### 13.1. QA Documentation & UI Automation Suite (`qa-doc-suite`)
-Pipeline pengujian antarmuka bertahap (9 tahap) dengan integrasi **Playwright MCP** dan triangulasi dokumentasi master ([`docs/PRD.md`](./docs/PRD.md), [`docs/USER_FLOWS.md`](./docs/USER_FLOWS.md)) + source code Vue/Pinia:
+A 9-stage progressive UI testing pipeline integrated with **Playwright MCP** and triangulated against ground-truth documentation ([`docs/PRD.md`](./docs/PRD.md), [`docs/USER_FLOWS.md`](./docs/USER_FLOWS.md), [`docs/UI_UX_SPECIFICATION.md`](./docs/UI_UX_SPECIFICATION.md)) and the Vue 3 / Pinia codebase:
 
-| Nama Skill | Trigger Command | Deskripsi & Peran |
+| Skill Name | Trigger Command | Description & Role |
 |---|---|---|
-| **`qa-doc-suite`** | `/qa-doc-suite [fitur]`<br>`/qa-suite [fitur]` | **Master Orchestrator & Gatekeeper:** Mengorkestrasi pipeline 9 dokumen lengkap per fitur, menegakkan gerbang review (*Review Gates 1-3, 4-6, 7-9*), dan menjalankan audit kepatuhan format (`python3 scripts/audit_docs.py`). |
-| **`qa-code-and-ui-analyzer-skill`** | `/qa-analyze [fitur]` | **Discovery Engine:** Membedah PRD, User Flows, file Vue SFC, store Pinia, RPC, serta live DOM & tree aksesibilitas via Playwright MCP (`browser_snapshot`, `browser_evaluate`). Menghasilkan `feature-analysis.json`. |
-| **`qa-spec-and-scenario-skill`** | `/qa-spec-plan [fitur]` | **Scenario Planner:** Menghasilkan Dokumen Tahap 1, 2, 3 (`00-feature-brief.md`, `01-questions-assumptions.md`, `02-test-scenarios.md`) berformat BDD *Given-When-Then* langsung dari Acceptance Criteria PRD. |
-| **`qa-ui-cataloger-skill`** | `/qa-ui-catalog [fitur]` | **UI & Locator Cataloger:** Menghasilkan Dokumen Tahap 4, 5, 6 (`03-screen-flow.md`, `04-test-data-spec.md`, `05-element-catalog.md`). Menerapkan *Dual-Strategy Locator* (Semantic Fallback + Rekomendasi Patch `data-testid` untuk developer). |
-| **`qa-test-case-and-runner-skill`** | `/qa-test-run [fitur]` | **Test Architect & Runner:** Menghasilkan Dokumen Tahap 7, 8, 9 (`06-test-cases.md`, `07-automation-architecture.md`, `reports/YYYY-MM-DD-run-01.md`). Mendukung eksekusi live test interaktif via Playwright MCP. |
+| **`qa-doc-suite`** | `/qa-doc-suite [feature]`<br>`/qa-suite [feature]` | **Master Orchestrator & Gatekeeper:** Coordinates the complete 9-document pipeline per feature, enforces progressive approval gates (*Review Gates 1–3, 4–6, 7–9*), and runs automated compliance audits (`python3 scripts/audit_docs.py`). |
+| **`qa-code-and-ui-analyzer-skill`** | `/qa-analyze [feature]` | **Discovery Engine:** Dissects PRD user stories, user flows, Vue SFC templates, Pinia stores, Supabase RPCs, and live DOM / accessibility trees via Playwright MCP (`browser_snapshot`, `browser_evaluate`). Emits `feature-analysis.json`. |
+| **`qa-spec-and-scenario-skill`** | `/qa-spec-plan [feature]` | **Scenario Planner:** Generates Stage 1, 2, and 3 documents (`00-feature-brief.md`, `01-questions-assumptions.md`, `02-test-scenarios.md`) in BDD *Given-When-Then* format directly from PRD Acceptance Criteria. |
+| **`qa-ui-cataloger-skill`** | `/qa-ui-catalog [feature]` | **UI & Locator Cataloger:** Generates Stage 4, 5, and 6 documents (`03-screen-flow.md`, `04-test-data-spec.md`, `05-element-catalog.md`). Applies *Dual-Strategy Locators* (Resilient Semantic Fallbacks + Developer `data-testid` patch recommendations). |
+| **`qa-test-case-and-runner-skill`** | `/qa-test-run [feature]` | **Test Architect & Runner:** Generates Stage 7, 8, and 9 documents (`06-test-cases.md`, `07-automation-architecture.md`, `reports/YYYY-MM-DD-run-01.md`). Supports interactive live browser test execution and screenshot recording via Playwright MCP. |
 
 ### 13.2. Knowledge Management & Project Governance Skills
-| Nama Skill | Trigger Command | Deskripsi & Peran |
+| Skill Name | Trigger Command | Description & Role |
 |---|---|---|
-| **`obsidian-session-logger-skill`** | `/log-session`<br>`catat sesi ini` | Mencatat riwayat sesi pair-programming ke Obsidian daily note (`0X_POS_OMK_<Topic>.md`) dengan tagging `#project/pos-omk`. |
-| **`obsidian-pkm-manager-skill`** | `/obsidian-note`<br>`/pkm-manager` | Mengelola catatan teknis atomik, ADR (Architecture Decision Records), dan panduan dev dengan validasi YAML dan backlink. |
-| **`agent-skill-creator`** | `/agent-skill-creator` | Mesin pembuat skill cross-platform Level 5 untuk menambah kapabilitas agent baru secara terstandarisasi. |
+| **`obsidian-session-logger-skill`** | `/log-session`<br>`log this session` | Logs engineering pair-programming history into Obsidian daily notes (`0X_POS_OMK_<Topic>.md`) tagged with `#project/pos-omk`. |
+| **`obsidian-pkm-manager-skill`** | `/obsidian-note`<br>`/pkm-manager` | Manages atomic technical notes, Architecture Decision Records (ADRs), and dev cheatsheets with YAML validation and bidirectional linking. |
+| **`agent-skill-creator`** | `/agent-skill-creator` | Level 5 cross-platform skill engine for creating new standardized agent capabilities. |
